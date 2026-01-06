@@ -1,0 +1,464 @@
+import numpy as np
+import pyomo.environ as pyo
+from pyomo.environ import *
+
+#Load the stored data
+#data = np.load('./data_primary.npz', allow_pickle = True)
+data = np.load('./data_nordic_physical_final.npy', allow_pickle = True).item()
+system_price_new  = np.load('./system_price_new.npy', allow_pickle=True).item()
+Area  = range(12)
+T = range(24)
+
+# Primarily setting of the penalty coefficient
+rho = 5 * 1.1 ** 19
+
+#The adjacent matrix for linked block orders and exclusive group block orders at the first bidding area
+# print(data['n_LB'][0])
+# print(data['LB'][0])
+# print(data['n_EG'][0])
+# print(data['EG'][0])
+
+#The ramping ratios for the subset subject to load gradient condition at the first bidding area
+data['slgG']['down'][0]
+data['slgG']['up'][0]
+data['slgG']['group'][0]
+
+#The new notations
+nE = []
+nEs = []
+nEd = []
+
+nRB = []
+nRBs = []
+nRBd = []
+
+nPB = []
+nPBs = []
+nPBd = []
+
+nFHB = []
+nFHBs = []
+nFHBd = []
+
+for a in Area:
+    nE.append(data['n_E']['n_d'][a] + data['n_E']['n_s'][a])
+    nEs.append(data['n_E']['n_s'][a])
+    nEd.append(data['n_E']['n_d'][a])
+
+    nRB.append(data['n_RB']['n_d'][a] + data['n_RB']['n_s'][a])
+    nRBs.append(data['n_RB']['n_s'][a])
+    nRBd.append(data['n_RB']['n_d'][a])
+
+    nPB.append(data['n_PB']['n_d'][a] + data['n_PB']['n_s'][a])
+    nPBs.append(data['n_PB']['n_s'][a])
+    nPBd.append(data['n_PB']['n_d'][a])
+
+    nFHB.append(data['n_FHB']['n_d'][a] + data['n_FHB']['n_s'][a])
+    nFHBd.append(data['n_FHB']['n_d'][a])
+    nFHBs.append(data['n_FHB']['n_s'][a])
+C = []
+A = []
+for a in Area:
+    C.append(np.zeros([24, nE[a] + nRB[a] + nPB[a]+ nFHB[a]]))
+    A.append(np.zeros([24, nE[a] + nRB[a] + nPB[a]+ nFHB[a]]))
+for t in T:
+    for a in Area:
+        for i in range(nEd[a]):
+            C[a][t][i] = - data['price'][a][t]['E']['demand'][i] * data['quantity'][a][t]['E']['demand'][i]
+            A[a][t][i] = - data['quantity'][a][t]['E']['demand'][i]
+        for i in range(nEd[a], nE[a]):
+            C[a][t][i] = data['price'][a][t]['E']['supply'][i - nEd[a]] * data['quantity'][a][t]['E']['supply'][i - nEd[a]]
+            A[a][t][i] = data['quantity'][a][t]['E']['supply'][i - nEd[a]]
+        for i in range(nE[a], nE[a] + nPBd[a]):
+            C[a][t][i] = - data['price'][a][t]['PB']['demand'][i - nE[a]] * data['quantity'][a][t]['PB']['demand'][i - nE[a]]
+            A[a][t][i] = - data['quantity'][a][t]['PB']['demand'][i - nE[a]]
+        for i in range(nE[a] + nPBd[a], nE[a] + nPB[a]):
+            C[a][t][i] = data['price'][a][t]['PB']['supply'][i - (nE[a] + nPBd[a])] * data['quantity'][a][t]['PB']['supply'][i - (nE[a] + nPBd[a])]
+            A[a][t][i] = data['quantity'][a][t]['PB']['supply'][i - (nE[a] + nPBd[a])]
+        for i in range(nE[a] + nPB[a], nE[a] + nPB[a] + nRBd[a]):
+            C[a][t][i] = - data['price'][a][t]['RB']['demand'][i - (nE[a] + nPB[a])] * data['quantity'][a][t]['RB']['demand'][i - (nE[a] + nPB[a])]
+            A[a][t][i] = - data['quantity'][a][t]['RB']['demand'][i - (nE[a] + nPB[a])]
+        for i in range(nE[a] + nPB[a] + nRBd[a], nE[a] + nPB[a] + nRB[a]):
+            C[a][t][i] = data['price'][a][t]['RB']['supply'][i - (nE[a] + nPB[a] + nRBd[a])] * data['quantity'][a][t]['RB']['supply'][i - (nE[a] + nPB[a] + nRBd[a])]
+            A[a][t][i] = data['quantity'][a][t]['RB']['supply'][i - (nE[a] + nPB[a] + nRBd[a])]
+        for i in range(nE[a] + nPB[a] + nRB[a], nE[a] + nPB[a] + nRB[a] + nFHBd[a]):
+            C[a][t][i] = - data['price'][a][t]['FHB']['demand'][i - (nE[a] + nPB[a] + nRB[a])] * data['quantity'][a][t]['FHB']['demand'][i - (nE[a] + nPB[a] + nRB[a])]
+            A[a][t][i] = - data['quantity'][a][t]['FHB']['demand'][i - (nE[a] + nPB[a] + nRB[a])]
+        for i in range(nE[a] + nPB[a] + nRB[a] + nFHBd[a], nE[a] + nPB[a] + nRB[a] + nFHB[a]):
+            C[a][t][i] = data['price'][a][t]['FHB']['supply'][i - (nE[a] + nPB[a] + nRB[a] + nFHBd[a])] * data['quantity'][a][t]['FHB']['supply'][i - (nE[a] + nPB[a] + nRB[a] + nFHBd[a])]
+            A[a][t][i] = data['quantity'][a][t]['FHB']['supply'][i - (nE[a] + nPB[a] + nRB[a] + nFHBd[a])]
+#Formulate the incidence matrix of the network          
+B = np.zeros([17, 12])
+for l in range(17):
+    B[l][data['lines'][l][0]] = 1
+    B[l][data['lines'][l][1]] = -1
+# print(np.linalg.pinv(B * B.T))
+B_1 = np.delete(B, -1, axis=1 )
+#Creating the hedge matrix
+H = B_1 @ np.linalg.inv(B_1.T @ B_1)
+def Obj_xEi(model, order_i):
+    return model.xE[order_i]
+
+# def Obj_Linear(model):
+#     return  sum(sum(model.x_E[a, i, t] * C[a][t][i] for i in range(model.E[a])) 
+#                  + sum(model.x_PB[a, i] * C[a][t][i] for i in range(model.E[a], model.E[a] + model.PB[a])) 
+#                  + sum(model.x_RB[a, i] * C[a][t][i] for i in range(model.E[a] + model.PB[a], model.E[a] + model.PB[a] + model.RB[a])) 
+#                  + sum(model.x_FHB[a, i, t] * C[a][t][i] for i in range(model.E[a] + model.PB[a] + model.RB[a], model.E[a] + model.PB[a] + model.RB[a] + model.FHB[a])) for a in model.Area for t in model.T)
+
+# def constr_net_injection_t(model, a, t):
+#         return  model.p[a,t] == (sum(model.x_E[a, i, t] * A[a][t][i] for i in range(model.E[a])) +  
+#                                  sum(model.x_PB[a, i] * A[a][t][i] for i in range(model.E[a], model.E[a] + model.PB[a])) + 
+#                                  sum(model.x_RB[a, i] * A[a][t][i] for i in range(model.E[a] + model.PB[a], model.E[a] + model.PB[a] + model.RB[a])) +
+#                                  sum(model.x_FHB[a, i, t] * A[a][t][i] for i in range(model.E[a] + model.PB[a] + model.RB[a], model.E[a] + model.PB[a] + model.RB[a] + model.FHB[a])))
+
+def constr_balance_t(model, t):
+    return sum(model.p[a,t] for a in model.Area) == 0   
+
+def constr_capacity_net_injection_1(model, a, t):
+    name = data['zone_names'][a]
+    return model.p[a,t] <= data['zone_data'][name]['P_max']
+
+def constr_capacity_net_injection_2(model, a, t):
+    name = data['zone_names'][a]
+    return model.p[a,t] >= -data['zone_data'][name]['P_max']
+
+#Hourly ramping of network injections
+def constr_hourly_ramping_net_injection_up_1(model, a, t):
+    name = data['zone_names'][a]
+    return model.p[a,t] - model.p[a,t-1] <= data['zone_data'][name]['ramp_up_h_%']
+    
+def constr_hourly_ramping_net_injection_up_2(model, a, t):
+    name = data['zone_names'][a]
+    return model.p[a,t] - model.p[a,t-1] >= -data['zone_data'][name]['ramp_up_h_%']
+
+def constr_hourly_ramping_net_injection_down_1(model, a, t):
+    name = data['zone_names'][a]
+    return model.p[a,t - 1] - model.p[a,t] <= data['zone_data'][name]['ramp_down_h_%']
+    
+def constr_hourly_ramping_net_injection_down_2(model, a, t):
+    name = data['zone_names'][a]
+    return model.p[a,t-1] - model.p[a,t] >= -data['zone_data'][name]['ramp_down_h_%']
+
+#Initial ramping of network injections
+def constr_init_hourly_ramping_net_injection_up_1(model, a, t):
+    name = data['zone_names'][a]
+    return model.p[a,t] - data['prev_hour_injection'][a] <= data['zone_data'][name]['ramp_up_h_%'] + model.cross_vio_up[a]
+
+def constr_init_hourly_ramping_net_injection_up_2(model, a, t):
+    name = data['zone_names'][a]
+    return model.p[a,t] - data['prev_hour_injection'][a] >= -(data['zone_data'][name]['ramp_up_h_%'] + model.cross_vio_up[a])
+
+def constr_init_hourly_ramping_net_injection_down_1(model, a, t):
+    name = data['zone_names'][a]
+    return data['prev_hour_injection'][a] - model.p[a,t] <= data['zone_data'][name]['ramp_down_h_%'] + model.cross_vio_down[a]
+    
+def constr_init_hourly_ramping_net_injection_down_2(model, a, t):
+    name = data['zone_names'][a]
+    return data['prev_hour_injection'][a] - model.p[a,t] >= -(data['zone_data'][name]['ramp_down_h_%'] + model.cross_vio_down[a])
+
+#Daily ramping of network injections
+    
+def constr_daily_ramping_net_injection_up_1(model, a):
+    name = data['zone_names'][a]
+    return sum(model.p[a,t] for t in model.T) / 24 - data['prev_day_avg_injection'][a] <= data['zone_data'][name]['ramp_up_d_%']
+    
+def constr_daily_ramping_net_injection_up_2(model, a):
+    name = data['zone_names'][a]
+    return sum(model.p[a,t] for t in model.T) / 24 - data['prev_day_avg_injection'][a] >= -data['zone_data'][name]['ramp_up_d_%']
+    
+def constr_daily_ramping_net_injection_down_1(model, a):
+    name = data['zone_names'][a]
+    return data['prev_day_avg_injection'][a] - sum(model.p[a,t] for t in model.T) / 24 <= data['zone_data'][name]['ramp_down_d_%']
+    
+def constr_daily_ramping_net_injection_down_2(model, a):
+    name = data['zone_names'][a]
+    return data['prev_day_avg_injection'][a] - sum(model.p[a,t] for t in model.T) / 24  >= -data['zone_data'][name]['ramp_down_d_%']
+    
+#Power flow constraint
+
+def constr_power_flow_t(model, l, t):
+    return model.f[l, t] == sum(H[l,a] * model.p[a,t] for a in model.Area_cut_ref)
+
+def constr_power_flow_capacity_1(model, l, t):
+    return model.f[l, t] <= data['lines'][l][2]
+
+def constr_power_flow_capacity_2(model, l, t):
+    return model.f[l, t] >= -data['lines'][l][2]
+
+#Hourly ramping of line set
+# g_n in model.Line_sets:
+def constr_power_flow_group_ramping_up_1(model, g_n, t):
+    return (sum(model.f[l, t] for l in model.Lines if (data['lines'][l][3] == g_n)) - 
+            sum(model.f[l, t-1] for l in model.Lines if (data['lines'][l][3] == g_n))) <= data['ramping_groups'][g_n][2]
+    
+def constr_power_flow_group_ramping_up_2(model, g_n, t):
+    return (sum(model.f[l, t] for l in model.Lines if (data['lines'][l][3] == g_n)) - 
+            sum(model.f[l, t-1] for l in model.Lines if (data['lines'][l][3] == g_n))) >= -data['ramping_groups'][g_n][2]
+
+def constr_power_flow_group_ramping_down_1(model, g_n, t):
+    return (sum(model.f[l, t-1] for l in model.Lines if (data['lines'][l][3] == g_n)) - 
+            sum(model.f[l, t] for l in model.Lines if (data['lines'][l][3] == g_n))) <= data['ramping_groups'][g_n][3]
+    
+def constr_power_flow_group_ramping_down_2(model, g_n, t):
+    return (sum(model.f[l, t-1] for l in model.Lines if (data['lines'][l][3] == g_n)) - 
+            sum(model.f[l, t] for l in model.Lines if (data['lines'][l][3] == g_n))) >= -data['ramping_groups'][g_n][3]
+    
+#Initial ramping of line sets
+def constr_init_power_flow_group_ramping_up_1(model, g_n, t):
+    return (sum(model.f[l, t] for l in model.Lines if (data['lines'][l][3] == g_n)) - 
+            sum(data['prev_hour_flow'][l][2] for l in model.Lines if (data['lines'][l][3] == g_n))) <= data['ramping_groups'][g_n][2]
+    
+def constr_init_power_flow_group_ramping_up_2(model, g_n, t):
+    return (sum(model.f[l, t] for l in model.Lines if (data['lines'][l][3] == g_n)) - 
+            sum(data['prev_hour_flow'][l][2] for l in model.Lines if (data['lines'][l][3] == g_n))) >= -data['ramping_groups'][g_n][2]
+
+def constr_init_power_flow_group_ramping_down_1(model, g_n, t):
+    return (sum(data['prev_hour_flow'][l][2] for l in model.Lines if (data['lines'][l][3] == g_n)) - 
+            sum(model.f[l, t] for l in model.Lines if (data['lines'][l][3] == g_n))) <= data['ramping_groups'][g_n][3]
+    
+def constr_init_power_flow_group_ramping_down_2(model, g_n, t):
+    return (sum(data['prev_hour_flow'][l][2] for l in model.Lines if (data['lines'][l][3] == g_n)) - 
+            sum(model.f[l, t] for l in model.Lines if (data['lines'][l][3] == g_n))) >= -data['ramping_groups'][g_n][3]
+
+
+#Orders related constraints
+def constr_PB_lb(model, a, i):
+    return model.u_PB[a, i] * data['PB']['Rmin'][a][i - nE[a]] <= model.x_PB[a, i]
+
+
+def constr_PB_ub(model, a, i):
+    return model.u_PB[a, i] >= model.x_PB[a, i]
+
+
+
+def constr_link_PB(model, a,  i):
+    return model.x_PB[a, i + nE[a]] <= (sum(model.x_PB[a, j + nE[a]] * data['LB'][a][i, j] for j in range(model.PB[a])) 
+                                      + sum(model.x_RB[a, j + nE[a]+ nPB[a] ] * data['LB'][a][i, j + nPB[a]] for j in range(model.RB[a])))
+
+
+def constr_link_RB(model, a, i):
+    return model.x_RB[a, i + nE[a] + nPB[a]] <= (sum(model.x_PB[a, j + nE[a]] * data['LB'][a][i + nPB[a], j] for j in range(model.PB[a])) 
+                                           + sum(model.x_RB[a, j+ nE[a]+ nPB[a]] * data['LB'][a][i + nPB[a], j + nPB[a]] for j in range(model.RB[a])))
+
+
+def constr_EG(model, a, i):
+    return (sum(model.x_PB[a, j + nE[a] ] * data['EG'][a][i, j] for j in range(model.PB[a])) + 
+            sum(model.x_RB[a, j + nE[a] + nPB[a]] * data['EG'][a][i, j + nPB[a]] for j in range(model.RB[a]))) <= 1
+    
+def constr_LG_up(model, a, i, t):
+    return data['quantity'][a][t]['E']['supply'][i - nEd[a]]  * model.x_E[a, i, t] -  data['quantity'][a][t - 1]['E']['supply'][i - nEd[a]] * model.x_E[a, i, t - 1] <= 60 * data['slgG']['up'][a][i - nEd[a]]
+
+
+def constr_LG_down(model, a, i, t):
+    return data['quantity'][a][t - 1]['E']['supply'][i - nEd[a]] * model.x_E[a, i, t - 1] - data['quantity'][a][t]['E']['supply'][i - nEd[a]] * model.x_E[a, i, t] <= 60 * data['slgG']['down'][a][i - nEd[a]]
+
+def constr_fhb(model, a, i, t):
+    return sum(model.x_FHB[a, i, t] for t in model.T) <= 1
+
+# create the MIP model
+model = ConcreteModel(name = 'The Stylized Example in Energy Market')
+model.to = pyo.Set(initialize = range(1))
+model.T = pyo.Set(initialize  = range(24))
+model.T_add_prev = pyo.Set(initialize  = range(25))
+model.Area = pyo.Set(initialize  = range(12))
+model.Area_cut_ref = pyo.Set(initialize  = range(11))
+model.Lines = pyo.Set(initialize  = range(17))
+model.Line_sets = pyo.Set(initialize  = range(6))
+
+model.E = nE
+model.Ed = nEd
+model.Es = nEs
+
+model.AreaE = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.E[a])])
+model.AreaEd = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.Ed[a])])
+model.AreaEs = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.Ed[a], model.E[a])])
+
+model.PB = nPB
+model.PBd = nPBd
+model.PBs = nPBs
+
+model.AreaPB = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.E[a],model.E[a] + model.PB[a])])
+model.AreaPBd = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.E[a], model.E[a] + model.PBd[a])])
+model.AreaPBs = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.E[a] + model.PBd[a], model.E[a] +model.PB[a], 1)])
+
+model.RB = nRB
+model.RBd = nRBd
+model.RBs = nRBs
+
+model.AreaRB = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.E[a] + model.PB[a], model.E[a] + model.PB[a] + model.RB[a])])
+model.AreaRBd = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.E[a] + model.PB[a], model.E[a] + model.PB[a] + model.RBd[a])])
+model.AreaRBs = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.E[a] + model.PB[a] + model.RBd[a], model.E[a] + model.PB[a] + model.RB[a], 1)])
+
+model.LG = data['slgG']['group']
+model.AreaLG = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in iter(model.LG[a])])
+
+model.AreaLB_PB = pyo.Set(dimen = 2, initialize = [(a, i) for a in model.Area for i in range(model.PB[a]) if sum(data['LB'][a][i, :]) != 0])
+
+
+model.AreaLB_RB = pyo.Set(dimen = 2, initialize = [(a, i) for a in model.Area for i in range(model.RB[a]) if sum(data['LB'][a][i + nPB[a], :]) != 0])
+
+
+model.EG = data['n_EG']
+model.AreaEG = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.EG[a])])
+
+
+model.FHB = nFHB
+model.FHBd = nFHBd
+model.FHBs = nFHBs
+
+model.AreaFHB = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.E[a] + model.RB[a] + model.PB[a], model.E[a] + model.RB[a] + model.PB[a] + model.FHB[a])])
+model.AreaFHBd = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.E[a] + model.RB[a] + model.PB[a], model.E[a] + model.PB[a] + model.RB[a] + model.FHBd[a])])
+model.AreaFHBs = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.E[a] + model.PB[a] + model.RB[a] + model.FHBd[a], model.E[a] + model.PB[a] + model.RB[a] + model.FHB[a], 1)])
+
+# model.LB = pyo.Set(initialize=data_dict['LB'])
+# model.EG = pyo.Set(initialize=data_dict['EG'])
+
+
+# define variables
+model.x_E = pyo.Var(model.AreaE, model.T, within = NonNegativeReals, bounds = (0, 1))
+model.x_PB = pyo.Var(model.AreaPB, within = NonNegativeReals, bounds = (0, 1))
+model.x_RB = pyo.Var(model.AreaRB, within = pyo.Binary)
+model.x_FHB = pyo.Var(model.AreaFHB, model.T, within = pyo.Binary)
+model.u_PB = pyo.Var(model.AreaPB, domain = pyo.Binary)
+model.p = pyo.Var(model.Area, model.T, within = Reals)
+model.q = pyo.Var(model.Area, model.T, within = NonNegativeReals)
+model.f = pyo.Var(model.Lines, model.T, within = Reals)
+
+model.cross_vio_up   = Var(model.Area, within=NonNegativeReals, initialize=0)
+model.cross_vio_down = Var(model.Area, within=NonNegativeReals, initialize=0)
+
+# add constriants
+# model.netinjecContr = pyo.Constraint(model.Area, model.T, rule = constr_net_injection_t)
+model.demandContr = pyo.Constraint(model.T, rule = constr_balance_t)
+model.PB_lb = pyo.Constraint(model.AreaPB, rule = constr_PB_lb)
+model.PB_ub = pyo.Constraint(model.AreaPB, rule = constr_PB_ub)
+model.LBPBConstr = pyo.Constraint(model.AreaLB_PB, rule = constr_link_PB)
+model.LBRBConstr = pyo.Constraint(model.AreaLB_RB, rule = constr_link_RB)
+model.EGConstr = pyo.Constraint(model.AreaEG, rule = constr_EG)
+model.LG_up = pyo.Constraint(model.AreaLG, model.T - model.to, rule = constr_LG_up)
+model.LG_down = pyo.Constraint(model.AreaLG, model.T - model.to, rule = constr_LG_down)
+model.FHBconstr = pyo.Constraint(model.AreaFHB, model.T, rule = constr_fhb)
+
+model.NetCapacity1 = pyo.Constraint(model.Area, model.T, rule = constr_capacity_net_injection_1)
+model.NetCapacity2 = pyo.Constraint(model.Area, model.T, rule = constr_capacity_net_injection_2)
+model.NetInjectionHourlyRampingUp1 = pyo.Constraint(model.Area, model.T - model.to, rule = constr_hourly_ramping_net_injection_up_1)
+model.NetInjectionHourlyRampingUp2 = pyo.Constraint(model.Area, model.T - model.to, rule = constr_hourly_ramping_net_injection_up_2)
+model.NetInjectionHourlyRampingDown1 = pyo.Constraint(model.Area, model.T - model.to, rule = constr_hourly_ramping_net_injection_down_1)
+model.NetInjectionHourlyRampingDown2 = pyo.Constraint(model.Area, model.T - model.to, rule = constr_hourly_ramping_net_injection_down_2)
+
+model.NetInjectionDailyRampingUp1 = pyo.Constraint(model.Area, rule = constr_daily_ramping_net_injection_up_1)
+model.NetInjectionDailyRampingUp2 = pyo.Constraint(model.Area, rule = constr_daily_ramping_net_injection_up_2)
+model.NetInjectionDailyRampingDown1 = pyo.Constraint(model.Area, rule = constr_daily_ramping_net_injection_down_1)
+model.NetInjectionDailyRampingDown2 = pyo.Constraint(model.Area, rule = constr_daily_ramping_net_injection_down_2)
+
+model.NetInjectionInitialRampingUp1 = pyo.Constraint(model.Area, model.to, rule = constr_init_hourly_ramping_net_injection_up_1)
+model.NetInjectionInitialRampingUp2 = pyo.Constraint(model.Area, model.to, rule = constr_init_hourly_ramping_net_injection_up_2)
+model.NetInjectionInitialRampingDown1 = pyo.Constraint(model.Area, model.to, rule = constr_init_hourly_ramping_net_injection_down_1)
+model.NetInjectionInitialRampingDown2 = pyo.Constraint(model.Area, model.to, rule = constr_init_hourly_ramping_net_injection_down_2)
+
+model.FlowConstr = pyo.Constraint(model.Lines,  model.T, rule = constr_power_flow_t)
+model.FlowCapacityConstr1 = pyo.Constraint(model.Lines,  model.T, rule = constr_power_flow_capacity_1)
+model.FlowCapacityConstr2 = pyo.Constraint(model.Lines,  model.T, rule = constr_power_flow_capacity_2)
+
+model.FlowSetRampingUpConstr1 = pyo.Constraint(model.Line_sets, model.T - model.to, rule = constr_power_flow_group_ramping_up_1)
+model.FlowSetRampingUpConstr2 = pyo.Constraint(model.Line_sets, model.T - model.to, rule = constr_power_flow_group_ramping_up_2)
+model.FlowSetRampingDownConstr1 = pyo.Constraint(model.Line_sets, model.T - model.to, rule = constr_power_flow_group_ramping_down_1)
+model.FlowSetRampingDownConstr2 = pyo.Constraint(model.Line_sets, model.T - model.to, rule = constr_power_flow_group_ramping_down_2)
+
+model.FlowSetInitialRampingUpConstr1 = pyo.Constraint(model.Line_sets, model.to, rule = constr_init_power_flow_group_ramping_up_1)
+model.FlowSetInitialRampingUpConstr2 = pyo.Constraint(model.Line_sets, model.to, rule = constr_init_power_flow_group_ramping_up_2)
+model.FlowSetInitialRampingDownConstr1 = pyo.Constraint(model.Line_sets, model.to, rule = constr_init_power_flow_group_ramping_down_1)
+model.FlowSetInitialRampingDownConstr2 = pyo.Constraint(model.Line_sets, model.to, rule = constr_init_power_flow_group_ramping_down_2)
+
+
+
+
+lambda_before = {}
+lambda_next = {}
+surrogate_subgradient_before = {}
+surrogate_subgradient_next = {}
+x_before = {}
+x_next = {}
+ALR_Value_next = {}
+LR_Value_next = {}
+net_inj_p_before = {}
+net_inj_p_next = {}
+obj = {}
+dem_vio = {}
+dem_vio_new = {}
+dem_vio_next = {}
+for a in Area:
+    ALR_Value_next[a] = {}
+    LR_Value_next[a] = {}
+    dem_vio[a] = {}
+    dem_vio_new[a] = {}
+    dem_vio_next[a] = {}
+    obj[a] = {}
+    x_before[a] = {}
+    x_next[a] = {}
+    lambda_before[a] = {}
+    lambda_next[a] = {}
+    surrogate_subgradient_before[a] = {}
+    surrogate_subgradient_next[a] = {}
+    net_inj_p_before[a] = {}
+    net_inj_p_next[a] = {}
+    for t in T:
+        lambda_next[a][t] = system_price_new[a][t]
+# LR = {}
+# for a in Area:
+#     LR[a] = {}
+#     for t in T:
+#         LR[a][t]= (sum(model.x_E[a, i, t] * C[a][t][i] for i in range(model.E[a])) + 
+#                                      sum(model.x_PB[a, i] * C[a][t][i] for i in range(model.E[a], model.E[a] + model.PB[a])) + 
+#                                      sum(model.x_RB[a, i] * C[a][t][i] for i in range(model.E[a] + model.PB[a], model.E[a] + model.PB[a] + model.RB[a])) + 
+#                                      sum(model.x_FHB[a, i, t] * C[a][t][i] for i in range(model.E[a] + model.PB[a] + model.RB[a], model.E[a] + model.PB[a] + model.RB[a] + model.FHB[a])) +
+#                                      lambda_next[a][t] * (model.p[a,t] -(sum(model.x_E[a, i, t] * A[a][t][i] for i in range(model.E[a])) +  
+#                                                                          sum(model.x_PB[a, i] * A[a][t][i] for i in range(model.E[a], model.E[a] + model.PB[a])) + 
+#                                                                          sum(model.x_RB[a, i] * A[a][t][i] for i in range(model.E[a] + model.PB[a], model.E[a] + model.PB[a] + model.RB[a])) +
+#                                                                          sum(model.x_FHB[a, i, t] * A[a][t][i] for i in range(model.E[a] + model.PB[a] + model.RB[a], model.E[a] + model.PB[a] + model.RB[a] + model.FHB[a])))))
+        
+# model.obj = pyo.Objective(expr = sum(LR[a][t] for a in model.Area for t in model.T), sense = pyo.minimize)
+deviation = {}
+actual_output = {}
+total = 0
+for a in model.Area:
+    deviation[a] = {}
+    actual_output[a] = {}
+    for t in model.T:
+        actual_output[a][t] = (
+            sum(A[a][t][i] * model.x_E[a, i, t] for i in range(nE[a])) +
+            sum(A[a][t][i] * model.x_PB[a, i] for i in range(nE[a], nE[a] + nPB[a])) +
+            sum(A[a][t][i] * model.x_RB[a, i] for i in range(nE[a] + nPB[a], nE[a] + nPB[a] + nRB[a])) +
+            sum(A[a][t][x] * model.x_FHB[a, x, t] for x in range(nE[a] + nPB[a] + nRB[a], nE[a] + nPB[a] + nRB[a] + nFHB[a]))
+        )
+        deviation[a][t] = model.p[a, t] - actual_output[a][t]                               
+        total += lambda_next[a][t] * deviation[a][t]               
+model.obj = Objective(expr = (sum(C[a][t][i] * model.x_E[a, i, t] for a in Area for i in range(nE[a])  for t in T) + 
+                                sum(C[a][t][i] * model.x_PB[a, i] for a in Area for i in range(nE[a], nE[a] + nPB[a]) for t in T) + sum(C[a][t][i] * model.x_RB[a, i] for a in Area for i in range(nE[a] + nPB[a], nE[a] + nPB[a] + nRB[a]) for t in T)+
+                                sum(C[a][t][i] * model.x_FHB[a, i, t] for a in Area for i in range(nE[a] + nPB[a] + nRB[a], nE[a] + nPB[a] + nRB[a] + nFHB[a])  for t in T) +
+                                total + sum(rho * model.q[a, t] for a in Area for t in T)), sense = pyo.minimize)
+def constraint_penalty_1(model, a, t):
+    return -model.q[a, t] <= deviation[a][t]
+def constraint_penalty_2(model, a, t):
+    return model.q[a, t] >= deviation[a][t]
+model.con1 = Constraint(Area, T, rule = constraint_penalty_1)
+model.con2 = Constraint(Area, T, rule = constraint_penalty_2)
+solver = SolverFactory('gurobi')
+solver.options['MIPGap'] = 10 ** (-3)
+solver.solve(model)
+x_re_initial = {}
+net_inj_p_re_init = {}
+dem_vio_re_init = {}
+for a in Area:
+    x_re_initial[a] = {}
+    net_inj_p_re_init[a] = {}
+    dem_vio_re_init[a] = {}
+    for t in T:
+        net_inj_p_re_init[a][t] = pyo.value(model.p[a,t])
+        x_re_initial[a][t] = np.concatenate([value(model.x_E[a, :, t]), value(model.x_PB[a, :]), value(model.x_RB[a, :]), value(model.x_FHB[a, :, t])])
+for a_1 in Area:
+    for t_1 in T:
+        dem_vio_re_init[a_1][t_1] = net_inj_p_re_init[a_1][t_1] - sum(A[a_1][t_1][x] * x_re_initial[a_1][t_1][x] for x in range(nE[a_1] + nPB[a_1] + nRB[a_1] + nFHB[a_1]))      
+sum_re_initial = sum(abs(dem_vio_re_init[a_1][t_1]) for a_1 in Area for t_1 in T)
+
+print(sum_re_initial)
