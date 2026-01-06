@@ -1,0 +1,757 @@
+import numpy as np
+import pyomo.environ as pyo
+from pyomo.environ import *
+
+#Load the stored data
+#data = np.load('./data_primary.npz', allow_pickle = True)
+data = np.load('./data_nordic_physical_final.npy', allow_pickle = True).item()
+block_value = np.load('block order value.npy', allow_pickle= True).item()
+lambda_rho = np.load('The exact rho and lambda.npy', allow_pickle = True).item()
+Storage_possible_PRO = np.load('Storage_possible_PRO.npy',  allow_pickle = True).item()
+Area  = range(12)
+T = range(24)
+
+
+
+#The adjacent matrix for linked block orders and exclusive group block orders at the first bidding area
+# print(data['n_LB'][0])
+# print(data['LB'][0])
+# print(data['n_EG'][0])
+# print(data['EG'][0])
+
+#The ramping ratios for the subset subject to load gradient condition at the first bidding area
+data['slgG']['down'][0]
+data['slgG']['up'][0]
+data['slgG']['group'][0]
+
+#The new notations
+nE = []
+nEs = []
+nEd = []
+
+nRB = []
+nRBs = []
+nRBd = []
+
+nPB = []
+nPBs = []
+nPBd = []
+
+nFHB = []
+nFHBs = []
+nFHBd = []
+
+for a in Area:
+    nE.append(data['n_E']['n_d'][a] + data['n_E']['n_s'][a])
+    nEs.append(data['n_E']['n_s'][a])
+    nEd.append(data['n_E']['n_d'][a])
+
+    nRB.append(data['n_RB']['n_d'][a] + data['n_RB']['n_s'][a])
+    nRBs.append(data['n_RB']['n_s'][a])
+    nRBd.append(data['n_RB']['n_d'][a])
+
+    nPB.append(data['n_PB']['n_d'][a] + data['n_PB']['n_s'][a])
+    nPBs.append(data['n_PB']['n_s'][a])
+    nPBd.append(data['n_PB']['n_d'][a])
+
+    nFHB.append(data['n_FHB']['n_d'][a] + data['n_FHB']['n_s'][a])
+    nFHBd.append(data['n_FHB']['n_d'][a])
+    nFHBs.append(data['n_FHB']['n_s'][a])
+
+C = []
+A = []
+for a in Area:
+    C.append(np.zeros([24, nE[a] + nRB[a] + nPB[a]+ nFHB[a]]))
+    A.append(np.zeros([24, nE[a] + nRB[a] + nPB[a]+ nFHB[a]]))
+for a in Area:
+    for t in T:
+        for i in range(nEd[a]):
+            C[a][t][i] = - data['price'][a][t]['E']['demand'][i] * data['quantity'][a][t]['E']['demand'][i]
+            A[a][t][i] = - data['quantity'][a][t]['E']['demand'][i]
+        for i in range(nEd[a], nE[a]):
+            C[a][t][i] = data['price'][a][t]['E']['supply'][i - nEd[a]] * data['quantity'][a][t]['E']['supply'][i - nEd[a]]
+            A[a][t][i] = data['quantity'][a][t]['E']['supply'][i - nEd[a]]
+        for i in range(nE[a], nE[a] + nPBd[a]):
+            C[a][t][i] = - data['price'][a][t]['PB']['demand'][i - nE[a]] * data['quantity'][a][t]['PB']['demand'][i - nE[a]]
+            A[a][t][i] = - data['quantity'][a][t]['PB']['demand'][i - nE[a]]
+        for i in range(nE[a] + nPBd[a], nE[a] + nPB[a]):
+            C[a][t][i] = data['price'][a][t]['PB']['supply'][i - (nE[a] + nPBd[a])] * data['quantity'][a][t]['PB']['supply'][i - (nE[a] + nPBd[a])]
+            A[a][t][i] = data['quantity'][a][t]['PB']['supply'][i - (nE[a] + nPBd[a])]
+        for i in range(nE[a] + nPB[a], nE[a] + nPB[a] + nRBd[a]):
+            C[a][t][i] = - data['price'][a][t]['RB']['demand'][i - (nE[a] + nPB[a])] * data['quantity'][a][t]['RB']['demand'][i - (nE[a] + nPB[a])]
+            A[a][t][i] = - data['quantity'][a][t]['RB']['demand'][i - (nE[a] + nPB[a])]
+        for i in range(nE[a] + nPB[a] + nRBd[a], nE[a] + nPB[a] + nRB[a]):
+            C[a][t][i] = data['price'][a][t]['RB']['supply'][i - (nE[a] + nPB[a] + nRBd[a])] * data['quantity'][a][t]['RB']['supply'][i - (nE[a] + nPB[a] + nRBd[a])]
+            A[a][t][i] = data['quantity'][a][t]['RB']['supply'][i - (nE[a] + nPB[a] + nRBd[a])]
+        for i in range(nE[a] + nPB[a] + nRB[a], nE[a] + nPB[a] + nRB[a] + nFHBd[a]):
+            C[a][t][i] = - data['price'][a][t]['FHB']['demand'][i - (nE[a] + nPB[a] + nRB[a])] * data['quantity'][a][t]['FHB']['demand'][i - (nE[a] + nPB[a] + nRB[a])]
+            A[a][t][i] = - data['quantity'][a][t]['FHB']['demand'][i - (nE[a] + nPB[a] + nRB[a])]
+        for i in range(nE[a] + nPB[a] + nRB[a] + nFHBd[a], nE[a] + nPB[a] + nRB[a] + nFHB[a]):
+            C[a][t][i] = data['price'][a][t]['FHB']['supply'][i - (nE[a] + nPB[a] + nRB[a] + nFHBd[a])] * data['quantity'][a][t]['FHB']['supply'][i - (nE[a] + nPB[a] + nRB[a] + nFHBd[a])]
+            A[a][t][i] = data['quantity'][a][t]['FHB']['supply'][i - (nE[a] + nPB[a] + nRB[a] + nFHBd[a])]
+            
+#Formulate the incidence matrix of the network          
+B = np.zeros([17, 12])
+for l in range(17):
+    B[l][data['lines'][l][0]] = 1
+    B[l][data['lines'][l][1]] = -1
+# print(np.linalg.pinv(B * B.T))
+B_1 = np.delete(B, -1, axis=1 )
+#Creating the hedge matrix
+H = B_1 @ np.linalg.inv(B_1.T @ B_1)
+def Obj_xEi(model, order_i):
+    return model.xE[order_i]
+
+def Obj_Linear(model):
+    return  sum(sum(model.x_E[a, i, t] * C[a][t][i] for (a,i) in model.AreaEd) + sum(model.x_E[a, i, t] * C[a][t][i] for (a,i) in model.AreaEs)
+                 + sum(model.x_PB[a, i] * C[a][t][i] for (a,i) in model.AreaPBd) + sum(model.x_PB[a, i] * C[a][t][i] for (a,i) in model.AreaPBs)
+                 + sum(model.x_RB[a, i] * C[a][t][i] for (a,i) in model.AreaRBd) + sum(model.x_RB[a, i] * C[a][t][i] for (a,i) in model.AreaRBs)
+                 + sum(model.x_FHB[a, i, t] * C[a][t][i] for (a,i) in model.AreaFHBd) + sum(model.x_FHB[a, i, t] * C[a][t][i] for (a,i) in model.AreaFHBs) for t in model.T)
+###To be carefully adjusted
+# def constr_balance_t(model, t):
+#         return  (- sum(model.x_E[a, i, t] * A[a][t][i] for (a,i) in model.AreaEd) - sum(model.x_PB[a, i] * A[a][t][i] for (a,i) in model.AreaPBd) 
+#                  - sum(model.x_RB[a, i] * A[a][t][i] for (a,i) in model.AreaRBd) - sum(model.x_FHB[a, i, t] * A[a][t][i] for (a,i) in model.AreaFHBd) ) == (sum
+#                      (model.x_E[a, i, t] * A[a][t][i] for (a,i) in model.AreaEs) + sum(model.x_PB[a, i] * A[a][t][i] for (a,i) in model.AreaPBs)
+#                      + sum(model.x_RB[a, i] * A[a][t][i] for (a,i) in model.AreaRBs) + sum(model.x_FHB[a, i, t] * A[a][t][i] for (a,i) in model.AreaFHBs))
+def constr_net_injection_t(model, a, t):
+        return  model.p[a,t] == (sum(model.x_E[a, i, t] * A[a][t][i] for i in range(model.Ed[a])) +  
+                                 sum(model.x_PB[a, i] * A[a][t][i] for i in range(model.E[a], model.E[a] + model.PBd[a])) + 
+                                 sum(model.x_RB[a, i] * A[a][t][i] for i in range(model.E[a] + model.PB[a], model.E[a] + model.PB[a] + model.RBd[a])) +
+                                 sum(model.x_FHB[a, i, t] * A[a][t][i] for i in range(model.E[a] + model.PB[a] + model.RB[a], model.E[a] + model.PB[a] + model.RB[a] + model.FHBd[a])) +
+                                 sum(model.x_E[a, i, t] * A[a][t][i] for i in range(model.Ed[a], model.E[a])) + 
+                                 sum(model.x_PB[a, i] * A[a][t][i] for i in range(model.E[a] + model.PBd[a], model.E[a] + model.PB[a])) +
+                                 sum(model.x_RB[a, i] * A[a][t][i] for i in range(model.E[a] + model.PB[a] + model.RBd[a], model.E[a] + model.PB[a] + model.RB[a])) +  
+                                 sum(model.x_FHB[a, i, t] * A[a][t][i] for i in range(model.E[a] + model.PB[a] + model.RB[a] + model.FHBd[a], model.E[a] + model.PB[a] + model.RB[a] + model.FHB[a])))
+def constr_balance_t(model, t):
+    return sum(model.p[a,t] for a in model.Area) == 0   
+
+def constr_capacity_net_injection_1(model, a, t):
+    name = data['zone_names'][a]
+    return model.p[a,t] <= data['zone_data'][name]['P_max']
+
+def constr_capacity_net_injection_2(model, a, t):
+    name = data['zone_names'][a]
+    return model.p[a,t] >= -data['zone_data'][name]['P_max']
+
+#Hourly ramping of network injections
+def constr_hourly_ramping_net_injection_up_1(model, a, t):
+    name = data['zone_names'][a]
+    return model.p[a,t] - model.p[a,t-1] <= data['zone_data'][name]['ramp_up_h_%']
+    
+def constr_hourly_ramping_net_injection_up_2(model, a, t):
+    name = data['zone_names'][a]
+    return model.p[a,t] - model.p[a,t-1] >= -data['zone_data'][name]['ramp_up_h_%']
+
+def constr_hourly_ramping_net_injection_down_1(model, a, t):
+    name = data['zone_names'][a]
+    return model.p[a,t - 1] - model.p[a,t] <= data['zone_data'][name]['ramp_down_h_%']
+    
+def constr_hourly_ramping_net_injection_down_2(model, a, t):
+    name = data['zone_names'][a]
+    return model.p[a,t-1] - model.p[a,t] >= -data['zone_data'][name]['ramp_down_h_%']
+
+#Initial ramping of network injections
+def constr_init_hourly_ramping_net_injection_up_1(model, a, t):
+    name = data['zone_names'][a]
+    return model.p[a,t] - data['prev_hour_injection'][a] <= data['zone_data'][name]['ramp_up_h_%'] + model.cross_vio_up[a]
+
+def constr_init_hourly_ramping_net_injection_up_2(model, a, t):
+    name = data['zone_names'][a]
+    return model.p[a,t] - data['prev_hour_injection'][a] >= -(data['zone_data'][name]['ramp_up_h_%'] + model.cross_vio_up[a])
+
+def constr_init_hourly_ramping_net_injection_down_1(model, a, t):
+    name = data['zone_names'][a]
+    return data['prev_hour_injection'][a] - model.p[a,t] <= data['zone_data'][name]['ramp_down_h_%'] + model.cross_vio_down[a]
+    
+def constr_init_hourly_ramping_net_injection_down_2(model, a, t):
+    name = data['zone_names'][a]
+    return data['prev_hour_injection'][a] - model.p[a,t] >= -(data['zone_data'][name]['ramp_down_h_%'] + model.cross_vio_down[a])
+
+#Daily ramping of network injections
+    
+def constr_daily_ramping_net_injection_up_1(model, a):
+    name = data['zone_names'][a]
+    return sum(model.p[a,t] for t in model.T) / 24 - data['prev_day_avg_injection'][a] <= data['zone_data'][name]['ramp_up_d_%']
+    
+def constr_daily_ramping_net_injection_up_2(model, a):
+    name = data['zone_names'][a]
+    return sum(model.p[a,t] for t in model.T) / 24 - data['prev_day_avg_injection'][a] >= -data['zone_data'][name]['ramp_up_d_%']
+    
+def constr_daily_ramping_net_injection_down_1(model, a):
+    name = data['zone_names'][a]
+    return data['prev_day_avg_injection'][a] - sum(model.p[a,t] for t in model.T) / 24 <= data['zone_data'][name]['ramp_down_d_%']
+    
+def constr_daily_ramping_net_injection_down_2(model, a):
+    name = data['zone_names'][a]
+    return data['prev_day_avg_injection'][a] - sum(model.p[a,t] for t in model.T) / 24  >= -data['zone_data'][name]['ramp_down_d_%']
+    
+#Power flow constraint
+
+def constr_power_flow_t(model, l, t):
+    return model.f[l, t] == sum(H[l,a] * model.p[a,t] for a in model.Area_cut_ref)
+
+def constr_power_flow_capacity_1(model, l, t):
+    return model.f[l, t] <= data['lines'][l][2]
+
+def constr_power_flow_capacity_2(model, l, t):
+    return model.f[l, t] >= -data['lines'][l][2]
+
+#Hourly ramping of line set
+# g_n in model.Line_sets:
+def constr_power_flow_group_ramping_up_1(model, g_n, t):
+    return (sum(model.f[l, t] for l in model.Lines if (data['lines'][l][3] == g_n)) - 
+            sum(model.f[l, t-1] for l in model.Lines if (data['lines'][l][3] == g_n))) <= data['ramping_groups'][g_n][2]
+    
+def constr_power_flow_group_ramping_up_2(model, g_n, t):
+    return (sum(model.f[l, t] for l in model.Lines if (data['lines'][l][3] == g_n)) - 
+            sum(model.f[l, t-1] for l in model.Lines if (data['lines'][l][3] == g_n))) >= -data['ramping_groups'][g_n][2]
+
+def constr_power_flow_group_ramping_down_1(model, g_n, t):
+    return (sum(model.f[l, t-1] for l in model.Lines if (data['lines'][l][3] == g_n)) - 
+            sum(model.f[l, t] for l in model.Lines if (data['lines'][l][3] == g_n))) <= data['ramping_groups'][g_n][3]
+    
+def constr_power_flow_group_ramping_down_2(model, g_n, t):
+    return (sum(model.f[l, t-1] for l in model.Lines if (data['lines'][l][3] == g_n)) - 
+            sum(model.f[l, t] for l in model.Lines if (data['lines'][l][3] == g_n))) >= -data['ramping_groups'][g_n][3]
+    
+#Initial ramping of line sets
+def constr_init_power_flow_group_ramping_up_1(model, g_n, t):
+    return (sum(model.f[l, t] for l in model.Lines if (data['lines'][l][3] == g_n)) - 
+            sum(data['prev_hour_flow'][l][2] for l in model.Lines if (data['lines'][l][3] == g_n))) <= data['ramping_groups'][g_n][2]
+    
+def constr_init_power_flow_group_ramping_up_2(model, g_n, t):
+    return (sum(model.f[l, t] for l in model.Lines if (data['lines'][l][3] == g_n)) - 
+            sum(data['prev_hour_flow'][l][2] for l in model.Lines if (data['lines'][l][3] == g_n))) >= -data['ramping_groups'][g_n][2]
+
+def constr_init_power_flow_group_ramping_down_1(model, g_n, t):
+    return (sum(data['prev_hour_flow'][l][2] for l in model.Lines if (data['lines'][l][3] == g_n)) - 
+            sum(model.f[l, t] for l in model.Lines if (data['lines'][l][3] == g_n))) <= data['ramping_groups'][g_n][3]
+    
+def constr_init_power_flow_group_ramping_down_2(model, g_n, t):
+    return (sum(data['prev_hour_flow'][l][2] for l in model.Lines if (data['lines'][l][3] == g_n)) - 
+            sum(model.f[l, t] for l in model.Lines if (data['lines'][l][3] == g_n))) >= -data['ramping_groups'][g_n][3]
+
+
+#Orders related constraints
+def constr_PB_lb(model, a, i):
+    return model.u_PB[a, i] * data['PB']['Rmin'][a][i - nE[a]] <= model.x_PB[a, i]
+
+
+def constr_PB_ub(model, a, i):
+    return model.u_PB[a, i] >= model.x_PB[a, i]
+
+
+
+def constr_link_PB(model, a,  i):
+    return model.x_PB[a, i + nE[a]] <= (sum(model.x_PB[a, j + nE[a]] * data['LB'][a][i, j] for j in range(model.PB[a])) 
+                                      + sum(model.x_RB[a, j + nE[a]+ nPB[a] ] * data['LB'][a][i, j + nPB[a]] for j in range(model.RB[a])))
+
+
+def constr_link_RB(model, a, i):
+    return model.x_RB[a, i + nE[a] + nPB[a]] <= (sum(model.x_PB[a, j + nE[a]] * data['LB'][a][i + nPB[a], j] for j in range(model.PB[a])) 
+                                           + sum(model.x_RB[a, j+ nE[a]+ nPB[a]] * data['LB'][a][i + nPB[a], j + nPB[a]] for j in range(model.RB[a])))
+
+
+def constr_EG(model, a, i):
+    return (sum(model.x_PB[a, j + nE[a] ] * data['EG'][a][i, j] for j in range(model.PB[a])) + 
+            sum(model.x_RB[a, j + nE[a] + nPB[a]] * data['EG'][a][i, j + nPB[a]] for j in range(model.RB[a]))) <= 1
+    
+def constr_LG_up(model, a, i, t):
+    return data['quantity'][a][t]['E']['supply'][i - nEd[a]]  * model.x_E[a, i, t] -  data['quantity'][a][t - 1]['E']['supply'][i - nEd[a]] * model.x_E[a, i, t - 1] <= 60 * data['slgG']['up'][a][i - nEd[a]]
+
+
+def constr_LG_down(model, a, i, t):
+    return data['quantity'][a][t - 1]['E']['supply'][i - nEd[a]] * model.x_E[a, i, t - 1] - data['quantity'][a][t]['E']['supply'][i - nEd[a]] * model.x_E[a, i, t] <= 60 * data['slgG']['down'][a][i - nEd[a]]
+
+def constr_fhb(model, a, i, t):
+    return sum(model.x_FHB[a, i, t] for t in model.T) <= 1
+
+def constr_PB_fix(model, a, i):
+    return block_value['xPB_value'][a, i] == model.x_PB[a, i]
+
+def constr_RB_fix(model, a, i):
+    return block_value['xRB_value'][a, i] == model.x_RB[a, i]
+    
+def constr_FHB_fix(model, a, i, t):
+    return block_value['xFHB_value'][t][a, i] == model.x_FHB[a, i, t]
+
+# create the MIP model
+model = ConcreteModel(name = 'The Stylized Example in Energy Market')
+model.to = pyo.Set(initialize = range(1))
+model.T = pyo.Set(initialize  = range(24))
+model.T_add_prev = pyo.Set(initialize  = range(25))
+model.Area = pyo.Set(initialize  = range(12))
+model.Area_cut_ref = pyo.Set(initialize  = range(11))
+model.Lines = pyo.Set(initialize  = range(17))
+model.Line_sets = pyo.Set(initialize  = range(6))
+
+model.E = nE
+model.Ed = nEd
+model.Es = nEs
+
+model.AreaE = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.E[a])])
+model.AreaEd = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.Ed[a])])
+model.AreaEs = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.Ed[a], model.E[a])])
+
+model.PB = nPB
+model.PBd = nPBd
+model.PBs = nPBs
+
+model.AreaPB = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.E[a],model.E[a] + model.PB[a])])
+model.AreaPBd = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.E[a], model.E[a] + model.PBd[a])])
+model.AreaPBs = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.E[a] + model.PBd[a], model.E[a] +model.PB[a], 1)])
+
+model.RB = nRB
+model.RBd = nRBd
+model.RBs = nRBs
+
+model.AreaRB = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.E[a] + model.PB[a], model.E[a] + model.PB[a] + model.RB[a])])
+model.AreaRBd = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.E[a] + model.PB[a], model.E[a] + model.PB[a] + model.RBd[a])])
+model.AreaRBs = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.E[a] + model.PB[a] + model.RBd[a], model.E[a] + model.PB[a] + model.RB[a], 1)])
+
+model.LG = data['slgG']['group']
+model.AreaLG = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in iter(model.LG[a])])
+
+model.AreaLB_PB = pyo.Set(dimen = 2, initialize = [(a, i) for a in model.Area for i in range(model.PB[a]) if sum(data['LB'][a][i, :]) != 0])
+
+
+model.AreaLB_RB = pyo.Set(dimen = 2, initialize = [(a, i) for a in model.Area for i in range(model.RB[a]) if sum(data['LB'][a][i + nPB[a], :]) != 0])
+
+
+model.EG = data['n_EG']
+model.AreaEG = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.EG[a])])
+
+
+model.FHB = nFHB
+model.FHBd = nFHBd
+model.FHBs = nFHBs
+
+model.AreaFHB = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.E[a] + model.RB[a] + model.PB[a], model.E[a] + model.RB[a] + model.PB[a] + model.FHB[a])])
+model.AreaFHBd = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.E[a] + model.RB[a] + model.PB[a], model.E[a] + model.PB[a] + model.RB[a] + model.FHBd[a])])
+model.AreaFHBs = pyo.Set(dimen = 2, initialize=[(a, e) for a in model.Area for e in range(model.E[a] + model.PB[a] + model.RB[a] + model.FHBd[a], model.E[a] + model.PB[a] + model.RB[a] + model.FHB[a], 1)])
+
+# model.LB = pyo.Set(initialize=data_dict['LB'])
+# model.EG = pyo.Set(initialize=data_dict['EG'])
+
+
+# define variables
+model.x_E = pyo.Var(model.AreaE, model.T, within = NonNegativeReals, bounds = (0, 1))
+model.x_PB = pyo.Var(model.AreaPB, within = NonNegativeReals, bounds = (0, 1))
+# model.x_RB = pyo.Var(model.AreaRB, within = pyo.Binary)
+# model.x_FHB = pyo.Var(model.AreaFHB, model.T, within = pyo.Binary)
+# model.u_PB = pyo.Var(model.AreaPB, domain = pyo.Binary)
+
+model.x_RB = pyo.Var(model.AreaRB, within = NonNegativeReals, bounds = (0, 1))
+model.x_FHB = pyo.Var(model.AreaFHB, model.T, within = NonNegativeReals, bounds = (0, 1))
+model.u_PB = pyo.Var(model.AreaPB, within = NonNegativeReals, bounds = (0, 1))
+
+model.p = pyo.Var(model.Area, model.T, within = Reals)
+model.f = pyo.Var(model.Lines, model.T, within = Reals)
+
+model.cross_vio_up   = Var(model.Area, within=NonNegativeReals, initialize=0)
+model.cross_vio_down = Var(model.Area, within=NonNegativeReals, initialize=0)
+
+# add constriants
+model.netinjecContr = pyo.Constraint(model.Area, model.T, rule = constr_net_injection_t)
+model.demandContr = pyo.Constraint(model.T, rule = constr_balance_t)
+model.PB_lb = pyo.Constraint(model.AreaPB, rule = constr_PB_lb)
+model.PB_ub = pyo.Constraint(model.AreaPB, rule = constr_PB_ub)
+model.LBPBConstr = pyo.Constraint(model.AreaLB_PB, rule = constr_link_PB)
+model.LBRBConstr = pyo.Constraint(model.AreaLB_RB, rule = constr_link_RB)
+model.EGConstr = pyo.Constraint(model.AreaEG, rule = constr_EG)
+model.LG_up = pyo.Constraint(model.AreaLG, model.T - model.to, rule = constr_LG_up)
+model.LG_down = pyo.Constraint(model.AreaLG, model.T - model.to, rule = constr_LG_down)
+model.FHBconstr = pyo.Constraint(model.AreaFHB, model.T, rule = constr_fhb)
+
+model.PB_fix = pyo.Constraint(model.AreaPB, rule = constr_PB_fix)
+model.RB_fix = pyo.Constraint(model.AreaRB, rule = constr_RB_fix)
+model.FHB_fix = pyo.Constraint(model.AreaFHB, model.T, rule = constr_FHB_fix)
+
+model.NetCapacity1 = pyo.Constraint(model.Area, model.T, rule = constr_capacity_net_injection_1)
+model.NetCapacity2 = pyo.Constraint(model.Area, model.T, rule = constr_capacity_net_injection_2)
+model.NetInjectionHourlyRampingUp1 = pyo.Constraint(model.Area, model.T - model.to, rule = constr_hourly_ramping_net_injection_up_1)
+model.NetInjectionHourlyRampingUp2 = pyo.Constraint(model.Area, model.T - model.to, rule = constr_hourly_ramping_net_injection_up_2)
+model.NetInjectionHourlyRampingDown1 = pyo.Constraint(model.Area, model.T - model.to, rule = constr_hourly_ramping_net_injection_down_1)
+model.NetInjectionHourlyRampingDown2 = pyo.Constraint(model.Area, model.T - model.to, rule = constr_hourly_ramping_net_injection_down_2)
+
+model.NetInjectionDailyRampingUp1 = pyo.Constraint(model.Area, rule = constr_daily_ramping_net_injection_up_1)
+model.NetInjectionDailyRampingUp2 = pyo.Constraint(model.Area, rule = constr_daily_ramping_net_injection_up_2)
+model.NetInjectionDailyRampingDown1 = pyo.Constraint(model.Area, rule = constr_daily_ramping_net_injection_down_1)
+model.NetInjectionDailyRampingDown2 = pyo.Constraint(model.Area, rule = constr_daily_ramping_net_injection_down_2)
+
+model.NetInjectionInitialRampingUp1 = pyo.Constraint(model.Area, model.to, rule = constr_init_hourly_ramping_net_injection_up_1)
+model.NetInjectionInitialRampingUp2 = pyo.Constraint(model.Area, model.to, rule = constr_init_hourly_ramping_net_injection_up_2)
+model.NetInjectionInitialRampingDown1 = pyo.Constraint(model.Area, model.to, rule = constr_init_hourly_ramping_net_injection_down_1)
+model.NetInjectionInitialRampingDown2 = pyo.Constraint(model.Area, model.to, rule = constr_init_hourly_ramping_net_injection_down_2)
+
+model.FlowConstr = pyo.Constraint(model.Lines,  model.T, rule = constr_power_flow_t)
+model.FlowCapacityConstr1 = pyo.Constraint(model.Lines,  model.T, rule = constr_power_flow_capacity_1)
+model.FlowCapacityConstr2 = pyo.Constraint(model.Lines,  model.T, rule = constr_power_flow_capacity_2)
+
+model.FlowSetRampingUpConstr1 = pyo.Constraint(model.Line_sets, model.T - model.to, rule = constr_power_flow_group_ramping_up_1)
+model.FlowSetRampingUpConstr2 = pyo.Constraint(model.Line_sets, model.T - model.to, rule = constr_power_flow_group_ramping_up_2)
+model.FlowSetRampingDownConstr1 = pyo.Constraint(model.Line_sets, model.T - model.to, rule = constr_power_flow_group_ramping_down_1)
+model.FlowSetRampingDownConstr2 = pyo.Constraint(model.Line_sets, model.T - model.to, rule = constr_power_flow_group_ramping_down_2)
+
+model.FlowSetInitialRampingUpConstr1 = pyo.Constraint(model.Line_sets, model.to, rule = constr_init_power_flow_group_ramping_up_1)
+model.FlowSetInitialRampingUpConstr2 = pyo.Constraint(model.Line_sets, model.to, rule = constr_init_power_flow_group_ramping_up_2)
+model.FlowSetInitialRampingDownConstr1 = pyo.Constraint(model.Line_sets, model.to, rule = constr_init_power_flow_group_ramping_down_1)
+model.FlowSetInitialRampingDownConstr2 = pyo.Constraint(model.Line_sets, model.to, rule = constr_init_power_flow_group_ramping_down_2)
+
+
+
+model.objL = pyo.Objective(rule = Obj_Linear, sense = pyo.minimize)
+
+opt = pyo.SolverFactory('gurobi')
+opt.options['MIPGap'] = 10 ** (-3)
+opt.solve(model)
+
+results = opt.solve(model, tee = True)
+print('Optimal objective function value is %d' % model.objL())
+# for a in model.Area:
+#     for t in range(12, 13):
+#         print(model.p[a,t].value)
+# for a in model.Area:
+#     name = data['zone_names'][a]
+#     print(sum(model.p[a,t].value for t in model.T) / 24, data['prev_day_avg_injection'][a], data['zone_data'][name]['ramp_up_d_%'], data['zone_data'][name]['ramp_down_d_%'])
+#     print(sum(model.p[a,t].value for t in model.T) / 24, data['prev_day_avg_injection'][a], data['zone_data'][name]['ramp_up_d_%'], data['zone_data'][name]['ramp_down_d_%'])
+
+
+# for a in model.Area:
+#     for t in range(1):
+#         name = data['zone_names'][a]
+#         print(model.p[a,t].value, data['prev_hour_injection'][a], data['zone_data'][name]['ramp_up_h_%'], data['zone_data'][name]['ramp_down_h_%'])
+#         # print(model.p[a,t].value, model.p[a, t+1].value, data['prev_hour_injection'][a], data['zone_data'][name]['ramp_up_h_%'], data['zone_data'][name]['ramp_down_h_%'])
+# for a in model.Area:
+#     print(model.cross_vio_up[a].value, model.cross_vio_down[a].value)
+    
+# for a in model.Area:
+#     for t in range(1):
+#         for i in range(model.Ed[a]):
+#             print(model.x_E[a, i, t].value)
+
+# for a in model.Area:
+#         for i in range(model.E[a] + model.PB[a] + model.RBd[a], model.E[a] + model.PB[a] + model.RB[a]):
+#             print(model.x_RB[a, i].value)
+
+data_dic = {}
+data_dic['obj'] = pyo.value(model.objL())
+np.save('The objective function value by Gurobi.npy', data_dic, allow_pickle = True)
+
+block_storage = {}
+block_storage['xPB_value'] = {}
+block_storage['xRB_value'] = {}
+block_storage['xFHB_value'] = {}
+for (a, i) in model.AreaPB:
+    block_storage['xPB_value'][a, i] = pyo.value(model.x_PB[a, i])
+for (a, i) in model.AreaRB:
+    block_storage['xRB_value'][a, i] = pyo.value(model.x_RB[a, i])
+for t in model.T:
+    block_storage['xFHB_value'][t] = {}
+    for[a, i] in model.AreaFHB:
+        block_storage['xFHB_value'][t][a, i] = pyo.value(model.x_FHB[a, i, t])
+# np.save('block order value.npy', block_storage, allow_pickle= True)
+model.dual = Suffix(direction=Suffix.IMPORT)
+opt = pyo.SolverFactory('gurobi')
+
+#######Store the values of all variables, separate the demand and supply
+variable_value_storage = {}
+
+variable_value_storage['xEd_value'] = {}
+variable_value_storage['xEs_value'] = {}
+variable_value_storage['xPBd_value'] = {}
+variable_value_storage['xPBs_value'] = {}
+variable_value_storage['xRBd_value'] = {}
+variable_value_storage['xRBs_value'] = {}
+variable_value_storage['xFHBd_value'] = {}
+variable_value_storage['xFHBs_value'] = {}
+
+for t in model.T:
+    variable_value_storage['xEd_value'][t] = {}
+    variable_value_storage['xEs_value'][t] = {}
+    
+    for (a, i) in model.AreaEd:
+        variable_value_storage['xEd_value'][t][a, i] = pyo.value(model.x_E[a, i, t])
+        
+    for (a, i) in model.AreaEs:
+        variable_value_storage['xEs_value'][t][a, i] = pyo.value(model.x_E[a, i, t])
+
+
+for (a, i) in model.AreaPBd:
+    variable_value_storage['xPBd_value'][a, i] = pyo.value(model.x_PB[a, i])
+    
+for (a, i) in model.AreaPBs:
+    variable_value_storage['xPBs_value'][a, i] = pyo.value(model.x_PB[a, i])
+    
+for (a, i) in model.AreaRBd:
+    variable_value_storage['xRBd_value'][a, i] = pyo.value(model.x_RB[a, i])
+    
+for (a, i) in model.AreaRBs:
+    variable_value_storage['xRBs_value'][a, i] = pyo.value(model.x_RB[a, i])
+    
+for t in model.T:
+    variable_value_storage['xFHBd_value'][t] = {}
+    variable_value_storage['xFHBs_value'][t] = {}
+    
+    for[a, i] in model.AreaFHBd:
+        variable_value_storage['xFHBd_value'][t][a, i] = pyo.value(model.x_FHB[a, i, t])
+    for[a, i] in model.AreaFHBs:
+        variable_value_storage['xFHBs_value'][t][a, i] = pyo.value(model.x_FHB[a, i, t])
+
+
+results = opt.solve(model, tee = True)
+print('Optimal objective function value is %f' % model.objL())
+#print(pyo.value(model.xPB[:]),pyo.value(model.xRB[:]))
+
+LP_dual_fix = {}
+print("Constraint Dual Values:")
+for a in model.Area:
+    LP_dual_fix[a] = {}
+    for t in model.T:
+        try:
+            dual_value = model.dual[model.netinjecContr[a, t]]
+            LP_dual_fix[a][t]= dual_value
+            print(f"demandContr[{a},{t}]: {dual_value}")
+        except KeyError:
+            print(f"demandContr[{t}]: Dual value not available")
+np.save('LP_dual_fix.npy', LP_dual_fix, allow_pickle = True)
+
+system_price = {}
+system_price_new = {}
+for a in model.Area:
+    system_price[a] = {}
+    system_price_new[a] = {}
+    for t in model.T:
+        system_price[a][t] = (-LP_dual_fix[a][t])
+        system_price_new[a][t] = (lambda_rho['rho']  + lambda_rho['lambda'][a][t] - 18)
+
+data['lines'][l][0]
+data['lines'][l][1]
+
+#Transit the from one equilibruim to the other
+Area_demand = np.array([2, 10])
+for a in Area_demand:
+    for t in model.T:
+        system_price_new[a][t] -= 11
+
+Area_supply = np.array([1, 2, 3, 5])
+for a in Area_supply:
+    for t in model.T:
+        system_price_new[a][t] += 4
+        
+Area_supply = np.array([0])
+for a in Area_supply:
+    for t in model.T:
+        system_price_new[a][t] += 21
+####Make a revenue for the transmission line owner
+for t in model.T:
+    for l in model.Lines:
+        if (pyo.value(model.f[l, t]) >= 0):
+            system_price_new[data['lines'][l][1]][t] += 2
+            system_price_new[data['lines'][l][0]][t] -= 2
+#Compute the revenue of the TSOs
+print('The revenue of each TSO according to fix binary-variable pricing starts here: \n')
+for l in model.Lines:
+    print(sum((system_price[data['lines'][l][1]][t] - system_price[data['lines'][l][0]][t]) * pyo.value(model.f[l, t]) for t in model.T))
+print('The sum of the revenue of each TSO according to fix binary-variable pricing starts here: \n')
+print(sum((system_price[data['lines'][l][1]][t] - system_price[data['lines'][l][0]][t]) * pyo.value(model.f[l, t]) for t in model.T for l in model.Lines))
+
+print('The revenue of each TSO according to ALD pricing starts here: \n')
+for l in model.Lines:
+    print(sum((system_price_new[data['lines'][l][1]][t] - system_price_new[data['lines'][l][0]][t]) * pyo.value(model.f[l, t]) for t in model.T))
+print('The sum of the revenue of each TSO according to ALD pricing starts here: \n')
+print(sum((system_price_new[data['lines'][l][1]][t] - system_price_new[data['lines'][l][0]][t]) * pyo.value(model.f[l, t]) for t in model.T for l in model.Lines))
+
+print('The profit of each demand elementary order starts here: \n')
+# for t in model.T:
+#     for (a, i) in model.AreaEd:
+#         print(variable_value_storage['xEd_value'][t][a, i])
+        
+# breakpoint()
+#check the demand elementary order
+welfare_Ed = {}
+welfare_Ed_old = {}
+
+# for (a, i) in model.AreaEd:
+for a in model.Area:
+    welfare_Ed[a] = {}
+    welfare_Ed_old[a] = {}
+    for i in range(model.Ed[a]):
+        welfare_Ed[a][i] = sum((data['price'][a][t]['E']['demand'][i] - system_price_new[a][t]) * data['quantity'][a][t]['E']['demand'][i] * variable_value_storage['xEd_value'][t][a, i] for t in model.T)
+        welfare_Ed_old[a][i] = sum((data['price'][a][t]['E']['demand'][i] - system_price[a][t]) * data['quantity'][a][t]['E']['demand'][i] * variable_value_storage['xEd_value'][t][a, i] for t in model.T)
+        print('%.2f, %.2f, %.2f' %(welfare_Ed_old[a][i], welfare_Ed[a][i], a))#, welfare_Ed[a][i]))
+
+#check the supply elementary order
+welfare_Es = {}
+welfare_Es_old = {}
+
+print('The profit of each supply elementary order starts here: \n')
+# for (a, i) in model.AreaEs:
+for a in model.Area:
+    welfare_Es_old[a] = {}
+    welfare_Es[a] = {}
+    for i in range(model.Ed[a], model.E[a]):
+        welfare_Es[a][i] = sum((system_price_new[a][t] -  (C[a][t][i] / A[a][t][i])) * A[a][t][i] * variable_value_storage['xEs_value'][t][a, i] for t in model.T)
+        welfare_Es_old[a][i] = sum((system_price[a][t] -  (C[a][t][i] / A[a][t][i])) * A[a][t][i] * variable_value_storage['xEs_value'][t][a, i] for t in model.T)
+        print('%.2f, %.2f, %.2f' %(welfare_Es_old[a][i], welfare_Es[a][i], a))#, welfare_Es[a][i]))
+
+print('The profit of each demand profile block order starts here: \n')
+#check the demand profile order
+welfare_pbd = {}
+welfare_pbd_old = {}
+# for (a, i) in model.AreaPBd:
+for a in model.Area:
+    welfare_pbd[a] = {}
+    welfare_pbd_old[a] = {}
+    for i in range(model.E[a], model.E[a] + model.PBd[a]):
+        welfare_pbd[a][i] = sum((C[a][t][i] / A[a][t][i] - system_price_new[a][t]) * (-A[a][t][i]) * variable_value_storage['xPBd_value'][a, i] for t in model.T)
+        welfare_pbd_old[a][i] = sum((C[a][t][i] / A[a][t][i] - system_price[a][t]) * (-A[a][t][i]) * variable_value_storage['xPBd_value'][a, i] for t in model.T)
+        print('%.2f, %.2f, %.2f' %(welfare_pbd_old[a][i], welfare_pbd[a][i], a))#, welfare_pbd[a][i], Verification_a[a]['x_PB'][i]))
+
+print('The profit of each supply profile block order starts here: \n')
+#check the supply profile order
+welfare_pbs = {}
+welfare_pbs_old = {}
+# for (a, i) in model.AreaPBs:
+for a in model.Area:
+    welfare_pbs[a] = {}
+    welfare_pbs_old[a] = {}
+    for i in range(model.E[a] + model.PBd[a], model.E[a] +model.PB[a], 1):
+        welfare_pbs[a][i] = sum((system_price_new[a][t] - C[a][t][i] / A[a][t][i]) * A[a][t][i] * variable_value_storage['xPBs_value'][a, i] for t in model.T)
+        welfare_pbs_old[a][i] = sum((system_price[a][t] - C[a][t][i] / A[a][t][i]) * A[a][t][i] * variable_value_storage['xPBs_value'][a, i] for t in model.T)
+        print('%.2f, %.2f, %.2f' %(welfare_pbs_old[a][i], welfare_pbs[a][i], a))#, welfare_pbs[a][i], Verification_a[a]['x_PB'][nPBd + i]))
+
+print('The profit of each demand regular block order starts here: \n')
+#check the demand regular block order
+welfare_rbd = {}
+welfare_rbd_old = {}
+# for (a, i) in model.AreaRBd:
+for a in model.Area:
+    welfare_rbd[a] = {}
+    welfare_rbd_old[a] = {}
+    for i in range(model.E[a] + model.PB[a], model.E[a] + model.PB[a] + model.RBd[a]):
+        welfare_rbd[a][i] = sum((C[a][t][i] / A[a][t][i] - system_price_new[a][t]) * (- A[a][t][i]) * variable_value_storage['xRBd_value'][a, i] for t in model.T)
+        welfare_rbd_old[a][i] = sum((C[a][t][i] / A[a][t][i] - system_price[a][t]) * (- A[a][t][i]) * variable_value_storage['xRBd_value'][a, i] for t in model.T)
+        print('%.2f, %.2f, %.2f' %(welfare_rbd_old[a][i], welfare_rbd[a][i], a))#, welfare_rbd[a][i], Verification_a[a]['x_RB'][i]))
+
+print('The profit of each supply regular block order starts here: \n')       
+#check the supply regular block order
+welfare_rbs = {}
+welfare_rbs_old = {}
+# for (a, i) in model.AreaRBs:
+for a in model.Area:
+    welfare_rbs[a] = {}
+    welfare_rbs_old[a] = {}
+    for i in range(model.E[a] + model.PB[a] + model.RBd[a], model.E[a] + model.PB[a] + model.RB[a], 1):
+        welfare_rbs[a][i] = sum((system_price_new[a][t] - C[a][t][i] / A[a][t][i]) * A[a][t][i] * variable_value_storage['xRBs_value'][a, i] for t in model.T)
+        welfare_rbs_old[a][i] = sum((system_price[a][t] - C[a][t][i] / A[a][t][i]) * A[a][t][i] * variable_value_storage['xRBs_value'][a, i] for t in model.T)
+        print('%.2f, %.2f, %.2f' %(welfare_rbs_old[a][i], welfare_rbs[a][i], a))#, welfare_rbs[a][i]))#, Verification_a[a]['x_RB'][nRBd + i]))
+
+print('The profit of each demand flexible hourly block order starts here: \n')
+#check the demand flexible hourly order
+welfare_fhbd = {}
+welfare_fhbd_old = {}
+# for (a, i) in model.AreaFHBd:
+for a in model.Area:
+    welfare_fhbd[a] = {}
+    welfare_fhbd_old[a] = {}
+    for i in range(model.E[a] + model.RB[a] + model.PB[a], model.E[a] + model.PB[a] + model.RB[a] + model.FHBd[a]):
+        welfare_fhbd[a][i] = sum((C[a][t][i] / A[a][t][i] - system_price_new[a][t]) * (- A[a][t][i]) * variable_value_storage['xFHBd_value'][t][a, i] for t in model.T)
+        welfare_fhbd_old[a][i] = sum((C[a][t][i] / A[a][t][i] - system_price[a][t]) * (- A[a][t][i]) * variable_value_storage['xFHBd_value'][t][a, i] for t in model.T)
+        print('%.2f, %.2f, %.2f' %(welfare_fhbd_old[a][i], welfare_fhbd[a][i], a))#, welfare_fhbd[a][i]))
+
+print('The profit of each supply flexible hourly block order starts here: \n')
+#check the supply flexible hourly order
+welfare_fhbs = {}
+welfare_fhbs_old = {}
+# for (a, i) in model.AreaFHBs:
+for a in model.Area:
+    welfare_fhbs[a] = {}
+    welfare_fhbs_old[a] = {}
+    for i in range(model.E[a] + model.PB[a] + model.RB[a] + model.FHBd[a], model.E[a] + model.PB[a] + model.RB[a] + model.FHB[a], 1):
+        welfare_fhbs[a][i] = sum((system_price_new[a][t] - C[a][t][i] / A[a][t][i] ) * A[a][t][i] * variable_value_storage['xFHBs_value'][t][a, i] for t in model.T)
+        welfare_fhbs_old[a][i] = sum((system_price[a][t] - C[a][t][i] / A[a][t][i] ) * A[a][t][i] * variable_value_storage['xFHBs_value'][t][a, i] for t in model.T)
+        print('%.2f, %.2f, %.2f' %(welfare_fhbs_old[a][i], welfare_fhbs[a][i], a))#, welfare_fhbs[a][i]))
+
+np.save('./system_price_new.npy', system_price_new, allow_pickle=True)
+
+print('The profit of each possible PRO with deviation according to the ALD pricing mechanism and the fix binary-variable pricing mechanism starts here: \n')
+welfare_with_deviation_fix_binary_variable = {}
+welfare_with_deviation_ALD = {}
+# for (a, i) in model.AreaPBd:
+for a in model.Area:
+    welfare_with_deviation_fix_binary_variable[a] = {}
+    welfare_with_deviation_ALD[a] = {}
+    for i in range(len(Storage_possible_PRO[a])):
+        welfare_with_deviation_ALD [a][i] = {}
+        welfare_with_deviation_fix_binary_variable[a][i] = {}
+        if (i in range (nPBd[a])):
+            welfare_with_deviation_ALD [a][i]['nPBd'] = []
+            welfare_with_deviation_fix_binary_variable[a][i]['nPBd'] = []
+            welfare_with_deviation_ALD [a][i]['nPBd'].append(sum((C[a][t][i+ nE[a]] / A[a][t][i+ nE[a]] - system_price_new[a][t]) * (-A[a][t][i+ nE[a]])  for t in model.T))
+            welfare_with_deviation_fix_binary_variable[a][i]['nPBd'].append(sum((C[a][t][i+ nE[a]] / A[a][t][i+ nE[a]] - system_price[a][t]) * (-A[a][t][i+ nE[a]]) for t in model.T))
+        else:
+            if (i in range(nPBd[a], nPB[a])):
+                welfare_with_deviation_ALD [a][i]['nPBs'] = []
+                welfare_with_deviation_fix_binary_variable[a][i]['nPBs'] = []
+                welfare_with_deviation_ALD [a][i]['nPBs'].append(sum((system_price_new[a][t] - 2 * lambda_rho['rho'] - C[a][t][i+ nE[a]] / A[a][t][i+ nE[a]]) * (A[a][t][i+ nE[a]])  for t in model.T))
+                welfare_with_deviation_fix_binary_variable[a][i]['nPBs'].append(sum((system_price[a][t] - C[a][t][i+ nE[a]] / A[a][t][i+ nE[a]]) * (A[a][t][i+ nE[a]]) for t in model.T))
+            else:
+                if (i in range(nPB[a], nPB[a] + nRBd[a])):
+                    welfare_with_deviation_ALD [a][i]['nRBd'] = []
+                    welfare_with_deviation_fix_binary_variable[a][i]['nRBd'] = []
+                    welfare_with_deviation_ALD [a][i]['nRBd'].append(sum((C[a][t][i+ nE[a]] / A[a][t][i+ nE[a]] - system_price_new[a][t]) * (-A[a][t][i+ nE[a]])  for t in model.T))
+                    welfare_with_deviation_fix_binary_variable[a][i]['nRBd'].append(sum((C[a][t][i+ nE[a]] / A[a][t][i+ nE[a]] - system_price[a][t]) * (-A[a][t][i+ nE[a]]) for t in model.T))
+                else:
+                    if (i in range(nPB[a] + nRBd[a],nPB[a] + nRB[a])):
+                        welfare_with_deviation_ALD [a][i]['nRBs'] = []
+                        welfare_with_deviation_fix_binary_variable[a][i]['nRBs'] = []
+                        welfare_with_deviation_ALD [a][i]['nRBs'].append(sum((system_price_new[a][t] - 2 * lambda_rho['rho'] - C[a][t][i+ nE[a]] / A[a][t][i+ nE[a]]) * (A[a][t][i+ nE[a]])  for t in model.T))
+                        welfare_with_deviation_fix_binary_variable[a][i]['nRBs'].append(sum((system_price[a][t] - C[a][t][i+ nE[a]] / A[a][t][i+ nE[a]]) * (A[a][t][i+ nE[a]]) for t in model.T))
+                    
+for a in range(12):
+    for i in range(len(Storage_possible_PRO[a])):
+        # print(a, welfare_with_deviation_ALD[a][i],  welfare_with_deviation_fix_binary_variable[a][i])
+        key1, value1 = next(iter(welfare_with_deviation_ALD[a][i].items()))
+        key2, value2 = next(iter(welfare_with_deviation_fix_binary_variable[a][i].items()))
+        # print(a, key1, value1, key2, value2)
+        value1_float = float(value1[0])
+        value2_float = float(value2[0])
+        if (value1_float < 0 and value2_float >0):
+            print(a, key1, value1_float, key2, value2_float)
+
+print('The PAOs that the ALD pricing mechanism eliminates from the fixing binary-variable pricing mechanism starts here:')
+for a in model.Area:
+    for i in range(model.Ed[a]):
+        if (welfare_Ed_old[a][i] < 0 and welfare_Ed[a][i] > 0):
+            print(a, 'Ed', welfare_Ed_old[a][i], welfare_Ed[a][i])
+    for i in range(model.Ed[a], model.E[a]):
+        if (welfare_Es_old[a][i] < 0 and welfare_Es[a][i] > 0):
+            print(a, 'Es', welfare_Es_old[a][i], welfare_Es[a][i])
+    for i in range(model.E[a], model.E[a] + model.PBd[a]):
+        if (welfare_pbd_old[a][i] < 0 and welfare_pbd[a][i] > 0):
+            print(a, 'PBd', welfare_pbd_old[a][i], welfare_pbd[a][i])
+    for i in range(model.E[a] + model.PBd[a], model.E[a] +model.PB[a], 1):
+        if (welfare_pbs_old[a][i] < 0 and welfare_pbs[a][i] > 0):
+            print(a, 'PBs', welfare_pbs_old[a][i], welfare_pbs[a][i])
+    for i in range(model.E[a] + model.PB[a], model.E[a] + model.PB[a] + model.RBd[a]):
+        if (welfare_rbd_old[a][i] < 0 and welfare_rbd[a][i] > 0):
+            print(a, 'RBd', welfare_rbd_old[a][i], welfare_rbd[a][i])
+    for i in range(model.E[a] + model.PB[a] + model.RBd[a], model.E[a] + model.PB[a] + model.RB[a], 1):
+        if (welfare_rbs_old[a][i] < 0 and welfare_rbs[a][i] > 0):
+            print(a, 'RBs', welfare_rbs_old[a][i], welfare_rbs[a][i])
+    for i in range(model.E[a] + model.RB[a] + model.PB[a], model.E[a] + model.PB[a] + model.RB[a] + model.FHBd[a]):
+        if (welfare_fhbd_old[a][i] < 0 and welfare_fhbd[a][i] > 0):
+            print(a, 'FHBd', welfare_fhbd_old[a][i], welfare_fhbd[a][i])
+    for i in range(model.E[a] + model.PB[a] + model.RB[a] + model.FHBd[a], model.E[a] + model.PB[a] + model.RB[a] + model.FHB[a], 1):
+        if (welfare_fhbs_old[a][i] < 0 and welfare_fhbs[a][i] > 0):
+            print(a, 'FHBs', welfare_fhbs_old[a][i], welfare_fhbs[a][i])
+        
+    
+
+# for a in model.Area:
+#     for t in model.T:
+#         print('%.2f, %.2f' %(-LP_dual_fix[a][t], t))
+
+# for a in model.Area:
+#     print(nEd[a], nEs[a], nPBd[a], nPBs[a], nRBd[a], nRBs[a], nFHBd[a], nFHBs[a])     
