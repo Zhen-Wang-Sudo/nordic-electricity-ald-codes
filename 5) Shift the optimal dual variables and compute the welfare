@@ -924,11 +924,4 @@ ax4.grid(True)
 plt.show()
 fig1.savefig('The congestion rent prices of four lines', dpi = 300)
 
-
-
-# for a in model.Area:
-#     for t in model.T:
-#         print('%.2f, %.2f' %(-LP_dual_fix[a][t], t))
-
-# for a in model.Area:
 #     print(nEd[a], nEs[a], nPBd[a], nPBs[a], nRBd[a], nRBs[a], nFHBd[a], nFHBs[a])     
