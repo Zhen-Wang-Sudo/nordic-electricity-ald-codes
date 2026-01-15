@@ -923,5 +923,4 @@ ax4.grid(True)
 
 plt.show()
 fig1.savefig('The congestion rent prices of four lines', dpi = 300)
-
-#     print(nEd[a], nEs[a], nPBd[a], nPBs[a], nRBd[a], nRBs[a], nFHBd[a], nFHBs[a])     
+  
