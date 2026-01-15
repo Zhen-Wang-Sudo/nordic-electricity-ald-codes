@@ -710,12 +710,14 @@ for a in model.Area:
 
 total_welfare_old_order = welfare_Ed_total_old + welfare_Es_total_old + welfare_rbd_total_old + welfare_rbs_total_old + welfare_pbd_total_old + welfare_pbs_total_old + welfare_fhbd_total_old + welfare_fhbs_total_old
 total_welfare_ALD_order = welfare_Ed_total_ALD + welfare_Es_total_ALD + welfare_rbd_total_ALD + welfare_rbs_total_ALD + welfare_pbd_total_ALD + welfare_pbs_total_ALD + welfare_fhbd_total_ALD + welfare_fhbs_total_ALD
-print('The total welfare of Fixed Binary-Variable pricing ang ALD pricing: \n')
+print('The total welfare of all orders by Fixed Binary-Variable pricing ang ALD pricing: \n')
 print('%.2f %.2f' %(total_welfare_old_order, total_welfare_ALD_order))
 total_welfare_old = total_welfare_old_order + TSO_revenue_old
 total_welfare_ALD = total_welfare_ALD_order + TSO_revenue_ALD
+print('The total welfare by Fixed Binary-Variable pricing ang ALD pricing: \n')
 print('%.2f, %.2f' %(total_welfare_old, total_welfare_ALD))
 
+breakpoint()
 np.save('./system_price_new.npy', system_price_new, allow_pickle=True)
 
 print('The profit of each possible PRO with deviation according to the ALD pricing mechanism and the fix binary-variable pricing mechanism starts here: \n')
