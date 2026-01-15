@@ -555,13 +555,15 @@ print('The revenue of each TSO according to fix binary-variable pricing starts h
 for l in model.Lines:
     print('%.2f' %( sum((system_price[data['lines'][l][1]][t] - system_price[data['lines'][l][0]][t]) * pyo.value(model.f[l, t]) for t in model.T)))
 print('The sum of the revenue of each TSO according to fix binary-variable pricing starts here: \n')
-print('%.2f'%( sum((system_price[data['lines'][l][1]][t] - system_price[data['lines'][l][0]][t]) * pyo.value(model.f[l, t]) for t in model.T for l in model.Lines)))
+TSO_revenue_old =  sum((system_price[data['lines'][l][1]][t] - system_price[data['lines'][l][0]][t]) * pyo.value(model.f[l, t]) for t in model.T for l in model.Lines)
+print('%.2f' %(TSO_revenue_old))
 
 print('The revenue of each TSO according to ALD pricing starts here: \n')
 for l in model.Lines:
     print('%.2f'%(sum((system_price_new[data['lines'][l][1]][t] - system_price_new[data['lines'][l][0]][t]) * pyo.value(model.f[l, t]) for t in model.T)))
 print('The sum of the revenue of each TSO according to ALD pricing starts here: \n')
-print('%.2f'%(sum((system_price_new[data['lines'][l][1]][t] - system_price_new[data['lines'][l][0]][t]) * pyo.value(model.f[l, t]) for t in model.T for l in model.Lines)))
+TSO_revenue_ALD = sum((system_price_new[data['lines'][l][1]][t] - system_price_new[data['lines'][l][0]][t]) * pyo.value(model.f[l, t]) for t in model.T for l in model.Lines)
+print('%.2f'%(TSO_revenue_ALD ))
 
 print('The profit of each demand elementary order starts here: \n')
 # for t in model.T:
@@ -574,12 +576,16 @@ welfare_Ed = {}
 welfare_Ed_old = {}
 
 # for (a, i) in model.AreaEd:
+welfare_Ed_total_old = 0
+welfare_Ed_total_ALD = 0
 for a in model.Area:
     welfare_Ed[a] = {}
     welfare_Ed_old[a] = {}
     for i in range(model.Ed[a]):
         welfare_Ed[a][i] = sum((data['price'][a][t]['E']['demand'][i] - system_price_new[a][t]) * data['quantity'][a][t]['E']['demand'][i] * variable_value_storage['xEd_value'][t][a, i] for t in model.T)
         welfare_Ed_old[a][i] = sum((data['price'][a][t]['E']['demand'][i] - system_price[a][t]) * data['quantity'][a][t]['E']['demand'][i] * variable_value_storage['xEd_value'][t][a, i] for t in model.T)
+        welfare_Ed_total_old += welfare_Ed_old[a][i]
+        welfare_Ed_total_ALD += welfare_Ed[a][i]
         print('%.2f, %.2f, %.2f' %(welfare_Ed_old[a][i], welfare_Ed[a][i], a))#, welfare_Ed[a][i]))
 
 #check the supply elementary order
@@ -588,18 +594,24 @@ welfare_Es_old = {}
 
 print('The profit of each supply elementary order starts here: \n')
 # for (a, i) in model.AreaEs:
+welfare_Es_total_old = 0 
+welfare_Es_total_ALD = 0
 for a in model.Area:
     welfare_Es_old[a] = {}
     welfare_Es[a] = {}
     for i in range(model.Ed[a], model.E[a]):
         welfare_Es[a][i] = sum((system_price_new[a][t] -  (C[a][t][i] / A[a][t][i])) * A[a][t][i] * variable_value_storage['xEs_value'][t][a, i] for t in model.T)
         welfare_Es_old[a][i] = sum((system_price[a][t] -  (C[a][t][i] / A[a][t][i])) * A[a][t][i] * variable_value_storage['xEs_value'][t][a, i] for t in model.T)
+        welfare_Es_total_old += welfare_Es_old[a][i]
+        welfare_Es_total_ALD += welfare_Es[a][i]
         print('%.2f, %.2f, %.2f' %(welfare_Es_old[a][i], welfare_Es[a][i], a))#, welfare_Es[a][i]))
 
 print('The profit of each demand profile block order starts here: \n')
 #check the demand profile order
 welfare_pbd = {}
 welfare_pbd_old = {}
+welfare_pbd_total_old = 0 
+welfare_pbd_total_ALD = 0
 # for (a, i) in model.AreaPBd:
 for a in model.Area:
     welfare_pbd[a] = {}
@@ -607,12 +619,16 @@ for a in model.Area:
     for i in range(model.E[a], model.E[a] + model.PBd[a]):
         welfare_pbd[a][i] = sum((C[a][t][i] / A[a][t][i] - system_price_new[a][t]) * (-A[a][t][i]) * variable_value_storage['xPBd_value'][a, i] for t in model.T)
         welfare_pbd_old[a][i] = sum((C[a][t][i] / A[a][t][i] - system_price[a][t]) * (-A[a][t][i]) * variable_value_storage['xPBd_value'][a, i] for t in model.T)
+        welfare_pbd_total_old += welfare_pbd_old[a][i] 
+        welfare_pbd_total_ALD += welfare_pbd[a][i]
         print('%.2f, %.2f, %.2f' %(welfare_pbd_old[a][i], welfare_pbd[a][i], a))#, welfare_pbd[a][i], Verification_a[a]['x_PB'][i]))
 
 print('The profit of each supply profile block order starts here: \n')
 #check the supply profile order
 welfare_pbs = {}
 welfare_pbs_old = {}
+welfare_pbs_total_old = 0 
+welfare_pbs_total_ALD = 0
 # for (a, i) in model.AreaPBs:
 for a in model.Area:
     welfare_pbs[a] = {}
@@ -620,12 +636,16 @@ for a in model.Area:
     for i in range(model.E[a] + model.PBd[a], model.E[a] +model.PB[a], 1):
         welfare_pbs[a][i] = sum((system_price_new[a][t] - C[a][t][i] / A[a][t][i]) * A[a][t][i] * variable_value_storage['xPBs_value'][a, i] for t in model.T)
         welfare_pbs_old[a][i] = sum((system_price[a][t] - C[a][t][i] / A[a][t][i]) * A[a][t][i] * variable_value_storage['xPBs_value'][a, i] for t in model.T)
+        welfare_pbs_total_old += welfare_pbs_old[a][i]
+        welfare_pbs_total_ALD += welfare_pbs[a][i]
         print('%.2f, %.2f, %.2f' %(welfare_pbs_old[a][i], welfare_pbs[a][i], a))#, welfare_pbs[a][i], Verification_a[a]['x_PB'][nPBd + i]))
 
 print('The profit of each demand regular block order starts here: \n')
 #check the demand regular block order
 welfare_rbd = {}
 welfare_rbd_old = {}
+welfare_rbd_total_old = 0 
+welfare_rbd_total_ALD = 0
 # for (a, i) in model.AreaRBd:
 for a in model.Area:
     welfare_rbd[a] = {}
@@ -633,12 +653,16 @@ for a in model.Area:
     for i in range(model.E[a] + model.PB[a], model.E[a] + model.PB[a] + model.RBd[a]):
         welfare_rbd[a][i] = sum((C[a][t][i] / A[a][t][i] - system_price_new[a][t]) * (- A[a][t][i]) * variable_value_storage['xRBd_value'][a, i] for t in model.T)
         welfare_rbd_old[a][i] = sum((C[a][t][i] / A[a][t][i] - system_price[a][t]) * (- A[a][t][i]) * variable_value_storage['xRBd_value'][a, i] for t in model.T)
+        welfare_rbd_total_old += welfare_rbd_old[a][i]
+        welfare_rbd_total_ALD += welfare_rbd[a][i]
         print('%.2f, %.2f, %.2f' %(welfare_rbd_old[a][i], welfare_rbd[a][i], a))#, welfare_rbd[a][i], Verification_a[a]['x_RB'][i]))
 
 print('The profit of each supply regular block order starts here: \n')       
 #check the supply regular block order
 welfare_rbs = {}
 welfare_rbs_old = {}
+welfare_rbs_total_old = 0 
+welfare_rbs_total_ALD = 0
 # for (a, i) in model.AreaRBs:
 for a in model.Area:
     welfare_rbs[a] = {}
@@ -646,12 +670,16 @@ for a in model.Area:
     for i in range(model.E[a] + model.PB[a] + model.RBd[a], model.E[a] + model.PB[a] + model.RB[a], 1):
         welfare_rbs[a][i] = sum((system_price_new[a][t] - C[a][t][i] / A[a][t][i]) * A[a][t][i] * variable_value_storage['xRBs_value'][a, i] for t in model.T)
         welfare_rbs_old[a][i] = sum((system_price[a][t] - C[a][t][i] / A[a][t][i]) * A[a][t][i] * variable_value_storage['xRBs_value'][a, i] for t in model.T)
+        welfare_rbs_total_old += welfare_rbs_old[a][i]
+        welfare_rbs_total_ALD += welfare_rbs[a][i]
         print('%.2f, %.2f, %.2f' %(welfare_rbs_old[a][i], welfare_rbs[a][i], a))#, welfare_rbs[a][i]))#, Verification_a[a]['x_RB'][nRBd + i]))
 
 print('The profit of each demand flexible hourly block order starts here: \n')
 #check the demand flexible hourly order
 welfare_fhbd = {}
 welfare_fhbd_old = {}
+welfare_fhbd_total_old = 0 
+welfare_fhbd_total_ALD = 0
 # for (a, i) in model.AreaFHBd:
 for a in model.Area:
     welfare_fhbd[a] = {}
@@ -659,12 +687,16 @@ for a in model.Area:
     for i in range(model.E[a] + model.RB[a] + model.PB[a], model.E[a] + model.PB[a] + model.RB[a] + model.FHBd[a]):
         welfare_fhbd[a][i] = sum((C[a][t][i] / A[a][t][i] - system_price_new[a][t]) * (- A[a][t][i]) * variable_value_storage['xFHBd_value'][t][a, i] for t in model.T)
         welfare_fhbd_old[a][i] = sum((C[a][t][i] / A[a][t][i] - system_price[a][t]) * (- A[a][t][i]) * variable_value_storage['xFHBd_value'][t][a, i] for t in model.T)
+        welfare_fhbd_total_old += welfare_fhbd_old[a][i]
+        welfare_fhbd_total_ALD += welfare_fhbd[a][i]
         print('%.2f, %.2f, %.2f' %(welfare_fhbd_old[a][i], welfare_fhbd[a][i], a))#, welfare_fhbd[a][i]))
 
 print('The profit of each supply flexible hourly block order starts here: \n')
 #check the supply flexible hourly order
 welfare_fhbs = {}
 welfare_fhbs_old = {}
+welfare_fhbs_total_old = 0 
+welfare_fhbs_total_ALD = 0
 # for (a, i) in model.AreaFHBs:
 for a in model.Area:
     welfare_fhbs[a] = {}
@@ -672,7 +704,17 @@ for a in model.Area:
     for i in range(model.E[a] + model.PB[a] + model.RB[a] + model.FHBd[a], model.E[a] + model.PB[a] + model.RB[a] + model.FHB[a], 1):
         welfare_fhbs[a][i] = sum((system_price_new[a][t] - C[a][t][i] / A[a][t][i] ) * A[a][t][i] * variable_value_storage['xFHBs_value'][t][a, i] for t in model.T)
         welfare_fhbs_old[a][i] = sum((system_price[a][t] - C[a][t][i] / A[a][t][i] ) * A[a][t][i] * variable_value_storage['xFHBs_value'][t][a, i] for t in model.T)
+        welfare_fhbs_total_old += welfare_fhbs_old[a][i]
+        welfare_fhbs_total_ALD += welfare_fhbs[a][i]
         print('%.2f, %.2f, %.2f' %(welfare_fhbs_old[a][i], welfare_fhbs[a][i], a))#, welfare_fhbs[a][i]))
+
+total_welfare_old_order = welfare_Ed_total_old + welfare_Es_total_old + welfare_rbd_total_old + welfare_rbs_total_old + welfare_pbd_total_old + welfare_pbs_total_old + welfare_fhbd_total_old + welfare_fhbs_total_old
+total_welfare_ALD_order = welfare_Ed_total_ALD + welfare_Es_total_ALD + welfare_rbd_total_ALD + welfare_rbs_total_ALD + welfare_pbd_total_ALD + welfare_pbs_total_ALD + welfare_fhbd_total_ALD + welfare_fhbs_total_ALD
+print('The total welfare of Fixed Binary-Variable pricing ang ALD pricing: \n')
+print('%.2f %.2f' %(total_welfare_old_order, total_welfare_ALD_order))
+total_welfare_old = total_welfare_old_order + TSO_revenue_old
+total_welfare_ALD = total_welfare_ALD_order + TSO_revenue_ALD
+print('%.2f, %.2f' %(total_welfare_old, total_welfare_ALD))
 
 np.save('./system_price_new.npy', system_price_new, allow_pickle=True)
 
@@ -725,28 +767,28 @@ print('The PAOs that the ALD pricing mechanism eliminates from the fixing binary
 for a in model.Area:
     for i in range(model.Ed[a]):
         if (welfare_Ed_old[a][i] < 0 and welfare_Ed[a][i] > 0):
-            print(a, 'Ed', round(welfare_Ed_old[a][i],2), round(welfare_Ed[a][i], 2))
+            print(a, 'Ed',  round(welfare_Ed[a][i], 2), round(welfare_Ed_old[a][i],2))
     for i in range(model.Ed[a], model.E[a]):
         if (welfare_Es_old[a][i] < 0 and welfare_Es[a][i] > 0):
-            print(a, 'Es', round(welfare_Es_old[a][i],2), round(welfare_Es[a][i],2))
+            print(a, 'Es', round(welfare_Es[a][i],2), round(welfare_Es_old[a][i],2))
     for i in range(model.E[a], model.E[a] + model.PBd[a]):
         if (welfare_pbd_old[a][i] < 0 and welfare_pbd[a][i] > 0):
-            print(a, 'PBd', round(welfare_pbd_old[a][i],2), round(welfare_pbd[a][i],2))
+            print(a, 'PBd', round(welfare_pbd[a][i],2), round(welfare_pbd_old[a][i],2))
     for i in range(model.E[a] + model.PBd[a], model.E[a] +model.PB[a], 1):
         if (welfare_pbs_old[a][i] < 0 and welfare_pbs[a][i] > 0):
-            print(a, 'PBs', round(welfare_pbs_old[a][i],2), round(welfare_pbs[a][i],2))
+            print(a, 'PBs', round(welfare_pbs[a][i],2), round(welfare_pbs_old[a][i],2))
     for i in range(model.E[a] + model.PB[a], model.E[a] + model.PB[a] + model.RBd[a]):
         if (welfare_rbd_old[a][i] < 0 and welfare_rbd[a][i] > 0):
-            print(a, 'RBd', round(welfare_rbd_old[a][i],2), round(welfare_rbd[a][i],2))
+            print(a, 'RBd', round(welfare_rbd[a][i],2), round(welfare_rbd_old[a][i],2))
     for i in range(model.E[a] + model.PB[a] + model.RBd[a], model.E[a] + model.PB[a] + model.RB[a], 1):
         if (welfare_rbs_old[a][i] < 0 and welfare_rbs[a][i] > 0):
-            print(a, 'RBs', round(welfare_rbs_old[a][i],2), round(welfare_rbs[a][i],2))
+            print(a, 'RBs', round(welfare_rbs[a][i],2), round(welfare_rbs_old[a][i],2))
     for i in range(model.E[a] + model.RB[a] + model.PB[a], model.E[a] + model.PB[a] + model.RB[a] + model.FHBd[a]):
         if (welfare_fhbd_old[a][i] < 0 and welfare_fhbd[a][i] > 0):
-            print(a, 'FHBd', round(welfare_fhbd_old[a][i],2), round(welfare_fhbd[a][i],2))
+            print(a, 'FHBd', round(welfare_fhbd[a][i],2), round(welfare_fhbd_old[a][i],2))
     for i in range(model.E[a] + model.PB[a] + model.RB[a] + model.FHBd[a], model.E[a] + model.PB[a] + model.RB[a] + model.FHB[a], 1):
         if (welfare_fhbs_old[a][i] < 0 and welfare_fhbs[a][i] > 0):
-            print(a, 'FHBs', round(welfare_fhbs_old[a][i],2), round(welfare_fhbs[a][i],2))
+            print(a, 'FHBs', round(welfare_fhbs[a][i],2), round(welfare_fhbs_old[a][i],2))
         
 
 
@@ -879,3 +921,12 @@ ax4.grid(True)
 
 plt.show()
 fig1.savefig('The congestion rent prices of four lines', dpi = 300)
+
+
+
+# for a in model.Area:
+#     for t in model.T:
+#         print('%.2f, %.2f' %(-LP_dual_fix[a][t], t))
+
+# for a in model.Area:
+#     print(nEd[a], nEs[a], nPBd[a], nPBs[a], nRBd[a], nRBs[a], nFHBd[a], nFHBs[a])     
