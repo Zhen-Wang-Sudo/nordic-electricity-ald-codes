@@ -3,7 +3,6 @@ import pyomo.environ as pyo
 from pyomo.environ import *
 
 #Load the stored data
-#data = np.load('./data_primary.npz', allow_pickle = True)
 data = np.load('./data_nordic_physical_final.npy', allow_pickle = True).item()
 block_value = np.load('block order value.npy', allow_pickle= True).item()
 Area  = range(12)
