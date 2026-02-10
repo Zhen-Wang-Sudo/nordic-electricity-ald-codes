@@ -856,7 +856,7 @@ ax4.set_xlabel('SE3')
 ax4.grid(True)
 
 plt.show()
-fig.savefig('The locational marginal prices of four bidding areas', dpi = 300)
+fig.savefig('The locational marginal prices of four bidding areas.pdf', bbox_inches='tight', dpi=600)
 
 
 
@@ -922,5 +922,7 @@ ax4.set_xlabel('$l_{14}$')
 ax4.grid(True)
 
 plt.show()
-fig1.savefig('The congestion rent prices of four lines', dpi = 300)
+#fig1.savefig('The congestion rent prices of four lines', dpi = 300)
+fig1.savefig('The congestion rent prices of four lines.pdf', bbox_inches='tight', dpi=600)
+
 
