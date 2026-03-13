@@ -717,7 +717,7 @@ total_welfare_ALD = total_welfare_ALD_order + TSO_revenue_ALD
 print('The total welfare by Fixed Binary-Variable pricing ang ALD pricing: \n')
 print('%.2f, %.2f' %(total_welfare_old, total_welfare_ALD))
 
-breakpoint()
+#breakpoint()
 np.save('./system_price_new.npy', system_price_new, allow_pickle=True)
 
 print('The profit of each possible PRO with deviation according to the ALD pricing mechanism and the fix binary-variable pricing mechanism starts here: \n')
@@ -794,133 +794,81 @@ for a in model.Area:
         
 
 
-y_1= []
-y_2 =[]
-for i in T:
-    y_1.append(system_price[0][i])
-    y_2.append(system_price_new[0][i])
-x_axis = np.arange(1,25,1)
-fig = plt.figure()
-ax1 = fig.add_subplot(221)
-ax1.plot(x_axis, y_1 , marker='o', linestyle='-', color='b', label='Fixed Binary-Variable')
-ax1.plot(x_axis, y_2, marker='s', linestyle='-', color='k', label='ALD')
-#ax1.set_title('The comparison of Fixed Binary-Variable pricing and ALD pricing') 
-#ax1.set_xlabel('The time slot') 
-ax1.set_ylabel('The LMP')  
-ax1.legend()
-ax1.grid(True)
+plt.rcParams.update({
+    'font.size': 16,                  
+    'font.family': 'serif',
+    'mathtext.fontset': 'stix',       
+    'font.weight': 'bold',            
+    'axes.labelweight': 'bold',
+    'axes.labelsize': 18,            
+    'xtick.labelsize': 14,            
+    'ytick.labelsize': 14,
+    'axes.linewidth': 2.0,          
+    'xtick.major.width': 2.0,
+    'ytick.major.width': 2.0,
+    'lines.linewidth': 2.5            
+})
 
-y_1= []
-y_2 =[]
-for i in T:
-    y_1.append(system_price[2][i])
-    y_2.append(system_price_new[2][i])
-x_axis = np.arange(1,25,1)
-ax2 = fig.add_subplot(222)
-ax2.plot(x_axis, y_1 , marker='o', linestyle='-', color='b', label='Fixed Binary-Variable')
-ax2.plot(x_axis, y_2, marker='s', linestyle='-', color='k', label='ALD')
-#ax2.set_title('The comparison of Fixed Binary-Variable pricing and ALD pricing') 
-#ax2.set_xlabel('The time slot') 
-#ax2.set_ylabel('The LMP')   
-#ax2.legend()
-ax2.grid(True)
 
-y_1= []
-y_2 =[]
-for i in T:
-    y_1.append(system_price[6][i])
-    y_2.append(system_price_new[6][i])
-x_axis = np.arange(1,25,1)
-ax3 = fig.add_subplot(223)
-ax3.plot(x_axis, y_1 , marker='o', linestyle='-', color='b', label='Fixed Binary-Variable')
-ax3.plot(x_axis, y_2, marker='s', linestyle='-', color='k', label='ALD')
-#ax3.set_title('The comparison of Fixed Binary-Variable pricing and ALD pricing')
-ax3.set_xlabel('The time slot') 
-ax3.set_ylabel('The LMP')  
-#ax3.legend()
-ax3.grid(True)
+fig = plt.figure(figsize=(9, 7)) 
+areas = [(0, 'DK1'), (2, 'FI'), (6, 'NO4'), (10, 'SE3')]
+x_axis = np.arange(1, 25, 1)
 
-y_1= []
-y_2 =[]
-for i in T:
-    y_1.append(system_price[10][i])
-    y_2.append(system_price_new[10][i])
-x_axis = np.arange(1,25,1)
-ax4 = fig.add_subplot(224)
-ax4.plot(x_axis, y_1 , marker='o', linestyle='-', color='b', label='Fixed Binary-Variable')
-ax4.plot(x_axis, y_2, marker='s', linestyle='-', color='k', label='ALD')
-#ax4.set_title('The comparison of fixing binary-variable pricing and ALD pricing')  
-ax4.set_xlabel('The time slot') 
-#ax4.set_ylabel('The LMP')  
-#ax4.legend()
-ax4.grid(True)
+for i, (area_idx, area_name) in enumerate(areas):
+    ax = fig.add_subplot(221 + i)
+    y1 = [system_price[area_idx][t] for t in range(24)]
+    y2 = [system_price_new[area_idx][t] for t in range(24)]
+    
+    
+    line1, = ax.plot(x_axis, y1, marker='o', markersize=8, linestyle='-', color='b', label='Fixed Binary-Variable')
+    line2, = ax.plot(x_axis, y2, marker='s', markersize=8, linestyle='-', color='k', label='ALD')
+    
+    ax.set_xlabel(area_name, fontweight='bold', labelpad=8) 
+    if i % 2 == 0: 
+        ax.set_ylabel('The LMP', fontweight='bold', labelpad=12) 
+    
+    ax.grid(True, linestyle='--', alpha=0.6, linewidth=1.0) 
 
-plt.show()
-fig.savefig('The locational marginal prices of four bidding areas', dpi = 300)
+
+fig.legend([line1, line2], ['Fixed Binary-Variable', 'ALD'], 
+           loc='upper center', ncol=2, bbox_to_anchor=(0.5, 1.05), 
+           prop={'weight':'bold', 'size': 16}, frameon=False)
+
+plt.tight_layout(pad=2.0, w_pad=2.5, h_pad=2.5) 
+fig.savefig('The_locational_marginal_prices_four_areas.pdf', bbox_inches='tight', dpi=600)
 
 
 
-y_1= []
-y_2 =[]
-for t in T:
-    y_1.append((system_price[data['lines'][2][1]][t] - system_price[data['lines'][2][0]][t]))
-    y_2.append((system_price_new[data['lines'][2][1]][t] - system_price_new[data['lines'][2][0]][t]))
-x_axis = np.arange(1,25,1)
-fig1 = plt.figure()
-ax1 = fig1.add_subplot(221)
-ax1.plot(x_axis, y_1 , marker='o', linestyle='-', color='#0077BB', label='Fixed Binary-Variable')
-ax1.plot(x_axis, y_2, marker='s', linestyle='-', color='#EE7733', label='ALD')
-#ax1.set_title('The comparison of Fixed Binary-Variable pricing and ALD pricing') 
-#ax1.set_xlabel('The time slot') 
-ax1.set_ylabel('The congestion price')  
-ax1.legend()
-ax1.grid(True)
+fig1 = plt.figure(figsize=(9, 7))
 
-y_1= []
-y_2 =[]
-for t in T:
-    y_1.append((system_price[data['lines'][8][1]][t] - system_price[data['lines'][8][0]][t]))
-    y_2.append((system_price_new[data['lines'][8][1]][t] - system_price_new[data['lines'][8][0]][t]))
-x_axis = np.arange(1,25,1)
-ax2 = fig1.add_subplot(222)
-ax2.plot(x_axis, y_1 , marker='o', linestyle='-', color='#0077BB', label='Fixed Binary-Variable')
-ax2.plot(x_axis, y_2, marker='s', linestyle='-', color='#EE7733', label='ALD')
-#ax2.set_title('The comparison of Fixed Binary-Variable pricing and ALD pricing')  
-#ax2.set_xlabel('The time slot') 
-#ax2.set_ylabel('The congestion price')   
-#ax2.legend()
-ax2.grid(True)
 
-y_1= []
-y_2 =[]
-for t in T:
-    y_1.append((system_price[data['lines'][11][1]][t] - system_price[data['lines'][11][0]][t]))
-    y_2.append((system_price_new[data['lines'][11][1]][t] - system_price_new[data['lines'][11][0]][t]))
-x_axis = np.arange(1,25,1)
-ax3 = fig1.add_subplot(223)
-ax3.plot(x_axis, y_1 , marker='o', linestyle='-', color='#0077BB', label='Fixed Binary-Variable pricing')
-ax3.plot(x_axis, y_2, marker='s', linestyle='-', color='#EE7733', label='ALD pricing')
-#ax3.set_title('The comparison of Fixed Binary-Variable pricing and ALD pricing')  
-ax3.set_xlabel('The time slot') 
-ax3.set_ylabel('The congestion price')  
-#ax3.legend()
-ax3.grid(True)
+lines_info = [
+    (2, r'$\boldsymbol{l}_2$'), 
+    (8, r'$\boldsymbol{l}_8$'), 
+    (11, r'$\boldsymbol{l}_{11}$'), 
+    (14, r'$\boldsymbol{l}_{14}$')
+]
 
-y_1= []
-y_2 =[]
-for t in T:
-    y_1.append((system_price[data['lines'][14][1]][t] - system_price[data['lines'][14][0]][t]))
-    y_2.append((system_price_new[data['lines'][14][1]][t] - system_price_new[data['lines'][14][0]][t]))
-x_axis = np.arange(1,25,1)
-ax4 = fig1.add_subplot(224)
-ax4.plot(x_axis, y_1 , marker='o', linestyle='-', color='#0077BB', label='Fixed Binary-Variable pricing')
-ax4.plot(x_axis, y_2, marker='s', linestyle='-', color='#EE7733', label='ALD pricing')
-#ax4.set_title('The comparison of Fixed Binary-Variable pricing and ALD pricing')  
-ax4.set_xlabel('The time slot') 
-#ax4.set_ylabel('The congestion price')  
-#ax4.legend()
-ax4.grid(True)
+for i, (line_idx, line_label) in enumerate(lines_info):
+    ax = fig1.add_subplot(221 + i)
+    y1 = [(system_price[data['lines'][line_idx][1]][t] - system_price[data['lines'][line_idx][0]][t]) for t in range(24)]
+    y2 = [(system_price_new[data['lines'][line_idx][1]][t] - system_price_new[data['lines'][line_idx][0]][t]) for t in range(24)]
+    
+
+    line1, = ax.plot(x_axis, y1, marker='o', markersize=8, linestyle='-', color='#0077BB', label='Fixed Binary-Variable')
+    line2, = ax.plot(x_axis, y2, marker='s', markersize=8, linestyle='-', color='#EE7733', label='ALD')
+    
+    ax.set_xlabel(line_label, fontweight='bold', labelpad=8)
+    if i % 2 == 0: 
+        ax.set_ylabel('The congestion price', fontweight='bold', labelpad=12)
+    
+    ax.grid(True, linestyle='--', alpha=0.6, linewidth=1.0)
+
+fig1.legend([line1, line2], ['Fixed Binary-Variable', 'ALD'], 
+            loc='upper center', ncol=2, bbox_to_anchor=(0.5, 1.05), 
+            prop={'weight':'bold', 'size': 16}, frameon=False)
+
+plt.tight_layout(pad=2.0, w_pad=2.5, h_pad=2.5)
+fig1.savefig('The_congestion_rent_prices_four_lines.pdf', bbox_inches='tight', dpi=600)
 
 plt.show()
-fig1.savefig('The congestion rent prices of four lines', dpi = 300)
-  
